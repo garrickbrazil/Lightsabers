@@ -7,17 +7,39 @@
 
 #include "lightsaber.h"
 
+CvMemStorage* storage;
+
 // Window properties
 int windowWidth = 800;
 int windowHeight = 600;
 int windowX = 100;
 int windowY = 100;
 
+CvSeq* circles;
+
+// Default capture size - 640x480
+CvSize size;
+
+float * ball1, *ball2;
+
+int c1 = 87;
+int c2 = 79;
+int c3 = 91;
+int cm1 = 119;
+int cm2 = 155;
+int cm3 = 136;
+
+CvCapture* capture;
+IplImage* frame;
+
 int bx = 100, by = 100, bz = 100;
+
+IplImage * hsv_frame;
+IplImage * thresholded;
 
 // Video and frame
 VideoCapture videoCapture;
-Mat frame;
+Mat texFrame;
 
 // Texture
 GLuint videoTexture;
@@ -116,10 +138,10 @@ void renderCylinder(float x1, float y1, float z1, float x2,float y2, float z2, f
  * Method: draw
  * Purpose: draws the lightsaber scene
 *********************************************************/
-void draw(Vec3f po1, Vec3f po2,int width,int height)
+void draw(float* po1, float* po2,int width,int height)
 {
 
-	Vec3f p1, p2;
+	float* p1, *p2;
 	if (po1[2] < po2[2]){
 		p1 = po1;
 		p2 = po2;
@@ -396,6 +418,8 @@ void keyboard( unsigned char key, int x, int y )
 void display()
 {
 	
+	
+
     // Clear buffers
 	glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
 
@@ -416,45 +440,29 @@ void display()
 	
     modifyFrame(frame);
 
-	 vector<Vec3f> circles;
-	 Mat src_gray,modFrame;
-	 modFrame=frame.clone();
-	 /// Convert it to gray
-  cvtColor( modFrame, src_gray, CV_BGR2GRAY);
-
-  /// Reduce the noise so we avoid false circle detection
-  GaussianBlur( src_gray, src_gray, Size(9, 9), 2, 2 );
-  /// Apply the Hough Transform to find the circles
-  HoughCircles( src_gray, circles, CV_HOUGH_GRADIENT, 1, src_gray.rows/16, 100, 50, 0, 0 );
-
-  /// Draw the circles detected
-  for( size_t i = 0; i < circles.size(); i++ )
-  {
-      Point center(cvRound(circles[i][0]), cvRound(circles[i][1]));
-      int radius = cvRound(circles[i][2]);
-      // circle center
-      circle( modFrame, center, 3, Scalar(0,255,0), -1, 8, 0 );
-      // circle outline
-      circle( modFrame, center, radius, Scalar(0,0,255), 3, 8, 0 );
-   }
-
+	texFrame = frame;
+	
 	if(true){
 		glDisable(GL_TEXTURE_2D);
 		glEnable(GL_BLEND);
 		glBlendFunc( GL_SRC_ALPHA_SATURATE, GL_ONE );
-		if(circles.size() == 2) draw(circles[0], circles[1], frame.size().width, frame.size().height);
+		if(ball1 != NULL && ball2 != NULL){
+      draw(ball1, ball2, texFrame.size().width, texFrame.size().height);
+      printf("Drew..");
+    }
 	}
 
-	if( modFrame.data)
+	if( texFrame.data)
     {
 		glEnable(GL_TEXTURE_2D);
-        glTexImage2D( GL_TEXTURE_2D, 0, GL_RGB, modFrame.size().width, modFrame.size().height, 0, GL_BGR, GL_UNSIGNED_BYTE, modFrame.data );
+        glTexImage2D( GL_TEXTURE_2D, 0, GL_RGB, texFrame.size().width, texFrame.size().height, 0, GL_BGR, GL_UNSIGNED_BYTE, texFrame.data );
     }
 	
 	
-	double ratio = modFrame.size().width*1.0/modFrame.size().height;
+	double ratio = texFrame.size().width*1.0/texFrame.size().height;
     glPushMatrix();
 	glDisable(GL_BLEND);
+	
 	// Configure texture mapping flipping (vertical) the video frame
 	glBegin( GL_QUADS );
 		glTexCoord2f( 0.0f, 1.0f ); glVertex3f( 0, 0.0f, 0.0f );
@@ -470,6 +478,10 @@ void display()
 
     displayText();
     
+	cvShowImage( "Camera", frame ); // Original stream with detected ball overlay
+	cvShowImage( "HSV", hsv_frame); // Original stream in the HSV color space
+	cvShowImage( "After Color Filtering", thresholded ); // The stream after color filtering
+
 	// Double buffering.
 	glutSwapBuffers();
 }
@@ -481,9 +493,47 @@ void display()
 void idle()
 {
     
-	// Get frame from video
-	//videoCapture.grab();
-	//videoCapture.retrieve(frame);
+	// Detect a red ball
+	CvScalar hsv_min = cvScalar(c1, c2, c3, 0);
+	CvScalar hsv_max = cvScalar(cm1, cm2, cm3, 0);
+	
+	// Get one frame
+	frame = cvQueryFrame( capture );
+	if( !frame ){
+		fprintf( stderr, "ERROR: frame is null...\n" );
+		getchar();
+		exit(-1);
+	}
+
+	// Covert color space to HSV as it is much easier to filter colors in the HSV color-space.
+	cvCvtColor(frame, hsv_frame, CV_BGR2HSV);
+	
+	// Filter out colors which are out of range.
+	cvInRangeS(hsv_frame, hsv_min, hsv_max, thresholded);
+
+	// Memory for hough circles
+	storage = cvCreateMemStorage(0);
+	
+	// Hough detector works better with some smoothing of the image
+	cvSmooth( thresholded, thresholded, CV_GAUSSIAN, 9, 9 );
+	circles = cvHoughCircles(thresholded, storage, CV_HOUGH_GRADIENT, 2,
+	thresholded->height/4, 100, 50, 10, 400);
+
+	for (int i = 0; i < circles->total; i++){
+		float* p = (float*)cvGetSeqElem( circles, i );
+		//printf("Ball! x=%f y=%f r=%f\n\r",p[0],p[1],p[2] );
+		cvCircle( frame, cvPoint(cvRound(p[0]),cvRound(p[1])),
+		3, CV_RGB(0,255,0), -1, 8, 0 );
+		cvCircle( frame, cvPoint(cvRound(p[0]),cvRound(p[1])),
+		cvRound(p[2]), CV_RGB(255,0,0), 3, 8, 0 );
+	}
+
+  if(circles ->total ==2){
+    ball1 = (float*)cvGetSeqElem( circles, 0 );
+    ball2 = (float*)cvGetSeqElem( circles, 1 );
+  }
+
+	//cvReleaseMemStorage(&storage);
 
     glutPostRedisplay();
 }
@@ -494,36 +544,42 @@ void idle()
 *********************************************************/
 int main(int argc, char** argv)
 {
-    // Setup webcam
-    videoCapture.open(1);
-    if (!videoCapture.isOpened())
-    {
-        printf("Could not open the camera");
-        return -1;
-    }
-    
-	// Grab first frame
-	//videoCapture.grab();
-	//videoCapture.retrieve(frame);
-    frame = imread( "Regular_Circles.jpg", CV_LOAD_IMAGE_COLOR );
-	if(frame.data){}
-	else printf("BLAH");
-	// Set window to frame size
-    windowWidth = frame.size().width;
-    windowHeight = frame.size().height;
-    
-    // Setup the glut window
+	size = cvSize(640,480);
+
+	// Open capture device
+	capture = cvCaptureFromCAM( 0 );
+	if( !capture ){
+		fprintf( stderr, "ERROR: capture is NULL \n" );
+		getchar();
+		return -1;
+	}
+
+	// Create a window in which the captured images will be presented
+	cvNamedWindow( "Camera", CV_WINDOW_AUTOSIZE );
+	cvNamedWindow( "HSV", CV_WINDOW_AUTOSIZE );
+	cvNamedWindow( "EdgeDetection", CV_WINDOW_AUTOSIZE );
+	cv::namedWindow("Settings", CV_WINDOW_AUTOSIZE);
+
+	cv::createTrackbar("c1", "Settings", &c1, 255, NULL);
+	cv::createTrackbar("c2", "Settings", &c2, 255, NULL);
+	cv::createTrackbar("c3", "Settings", &c3, 255, NULL);
+	cv::createTrackbar("cm1", "Settings", &cm1, 255, NULL);
+	cv::createTrackbar("cm2", "Settings", &cm2, 255, NULL);
+	cv::createTrackbar("cm3", "Settings", &cm3, 255, NULL);
+
+
+	hsv_frame = cvCreateImage(size, IPL_DEPTH_8U, 3);
+	thresholded = cvCreateImage(size, IPL_DEPTH_8U, 1);
+	
+	
+	//frame = imread( "Regular_Circles.jpg", CV_LOAD_IMAGE_COLOR );
+	
+	// Setup the glut window
     glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_DOUBLE|GLUT_RGBA|GLUT_DEPTH);
     glutInitWindowSize(windowWidth, windowHeight);
     glutInitWindowPosition(windowX, windowY);
     glutCreateWindow("CS-420 - Light Saber");
-	namedWindow("Settings", CV_WINDOW_AUTOSIZE);
-    
-	createTrackbar("bx","Settings",&bx,200,NULL);
-	createTrackbar("by","Settings",&by,200,NULL);
-	createTrackbar("bz","Settings",&bz,200,NULL);
-	imshow("Settings", frame);
 
     init();
     
@@ -535,9 +591,8 @@ int main(int argc, char** argv)
 	// Start openGL loop
     glutMainLoop();
     
-    videoCapture.release();
-    frame.release();
-    
+    cvReleaseCapture( &capture );
+	cvDestroyWindow( "mywindow" );
     return 0;
     
 }

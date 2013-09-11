@@ -20,14 +20,19 @@ CvSeq* circles;
 // Default capture size - 640x480
 CvSize size;
 
-float * ball1, *ball2;
+float * ball1, *ball2;	
+float avg1[3][3];
+float avg2[3][3];
+int count1 =0, count2=0;
 
-int c1 = 87;
-int c2 = 79;
-int c3 = 91;
-int cm1 = 119;
-int cm2 = 155;
-int cm3 = 136;
+int c1 = 40;
+int c2 = 90;
+int c3 = 39;
+int cm1 = 125;
+int cm2 = 200;
+int cm3 = 172;
+int param1 = 100;
+int param2 = 38;
 
 CvCapture* capture;
 IplImage* frame;
@@ -447,8 +452,8 @@ void display()
 		glEnable(GL_BLEND);
 		glBlendFunc( GL_SRC_ALPHA_SATURATE, GL_ONE );
 		if(ball1 != NULL && ball2 != NULL){
-      draw(ball1, ball2, texFrame.size().width, texFrame.size().height);
-      printf("Drew..");
+      //draw(ball1, ball2, texFrame.size().width, texFrame.size().height);
+      //printf("Drew..");
     }
 	}
 
@@ -508,17 +513,35 @@ void idle()
 	// Covert color space to HSV as it is much easier to filter colors in the HSV color-space.
 	cvCvtColor(frame, hsv_frame, CV_BGR2HSV);
 	
+	//cvSmooth( hsv_frame, hsv_frame, CV_GAUSSIAN, 9, 9 );
+
 	// Filter out colors which are out of range.
 	cvInRangeS(hsv_frame, hsv_min, hsv_max, thresholded);
-
+	
 	// Memory for hough circles
 	storage = cvCreateMemStorage(0);
 	
 	// Hough detector works better with some smoothing of the image
 	cvSmooth( thresholded, thresholded, CV_GAUSSIAN, 9, 9 );
-	circles = cvHoughCircles(thresholded, storage, CV_HOUGH_GRADIENT, 2,
-	thresholded->height/4, 100, 50, 10, 400);
+	cvSmooth( thresholded, thresholded, CV_GAUSSIAN, 9, 9 );
+	cvSmooth( thresholded, thresholded, CV_GAUSSIAN, 9, 9 );
+	cvSmooth( thresholded, thresholded, CV_GAUSSIAN, 9, 9 );
+	cvSmooth( thresholded, thresholded, CV_GAUSSIAN, 9, 9 );
+	cvSmooth( thresholded, thresholded, CV_GAUSSIAN, 9, 9 );
+	cvSmooth( thresholded, thresholded, CV_GAUSSIAN, 9, 9 );
+	cvSmooth( thresholded, thresholded, CV_GAUSSIAN, 9, 9 );
+	cvSmooth( thresholded, thresholded, CV_GAUSSIAN, 9, 9 );
+	cvSmooth( thresholded, thresholded, CV_GAUSSIAN, 9, 9 );
+	cvSmooth( thresholded, thresholded, CV_GAUSSIAN, 9, 9 );
+	cvSmooth( thresholded, thresholded, CV_GAUSSIAN, 9, 9 );
+	cvSmooth( thresholded, thresholded, CV_GAUSSIAN, 9, 9 );
+	cvSmooth( thresholded, thresholded, CV_GAUSSIAN, 9, 9 );
+	cvSmooth( thresholded, thresholded, CV_GAUSSIAN, 9, 9 );
 
+	circles = cvHoughCircles(thresholded, storage, CV_HOUGH_GRADIENT, 2,
+	thresholded->height/16, param1, param2, 1, 800);
+
+	
 	for (int i = 0; i < circles->total; i++){
 		float* p = (float*)cvGetSeqElem( circles, i );
 		//printf("Ball! x=%f y=%f r=%f\n\r",p[0],p[1],p[2] );
@@ -527,10 +550,27 @@ void idle()
 		cvCircle( frame, cvPoint(cvRound(p[0]),cvRound(p[1])),
 		cvRound(p[2]), CV_RGB(255,0,0), 3, 8, 0 );
 	}
+	
 
-  if(circles ->total ==2){
+  if(circles ->total == 2){
     ball1 = (float*)cvGetSeqElem( circles, 0 );
     ball2 = (float*)cvGetSeqElem( circles, 1 );
+	
+	if(count1 < 3 && count2 < 3){
+		avg1[count1][0] += ((float*)cvGetSeqElem( circles, 0 ))[0];
+		avg1[count1][0] += ((float*)cvGetSeqElem( circles, 0 ))[1];
+		avg1[count1][2] += ((float*)cvGetSeqElem( circles, 0 ))[2];
+		avg2[count2][0] += ((float*)cvGetSeqElem( circles, 1 ))[0];
+		avg2[count2][1] += ((float*)cvGetSeqElem( circles, 1 ))[1];
+		avg2[count2][2] += ((float*)cvGetSeqElem( circles, 1 ))[2];
+		count1 += 1;
+		count2 += 1;
+	}
+	else {
+		
+		
+	}
+	printf("avg1 = { %lf %lf %lf } avg2 = { %lf %lf %lf }\n",avg1[0], avg1[1],avg1[2],avg2[0], avg2[1],avg2[2]);
   }
 
 	//cvReleaseMemStorage(&storage);
@@ -544,10 +584,11 @@ void idle()
 *********************************************************/
 int main(int argc, char** argv)
 {
+	
 	size = cvSize(640,480);
 
 	// Open capture device
-	capture = cvCaptureFromCAM( 0 );
+	capture = cvCaptureFromCAM( 1 );
 	if( !capture ){
 		fprintf( stderr, "ERROR: capture is NULL \n" );
 		getchar();
@@ -566,7 +607,8 @@ int main(int argc, char** argv)
 	cv::createTrackbar("cm1", "Settings", &cm1, 255, NULL);
 	cv::createTrackbar("cm2", "Settings", &cm2, 255, NULL);
 	cv::createTrackbar("cm3", "Settings", &cm3, 255, NULL);
-
+	cv::createTrackbar("param1", "Settings", &param1, 200, NULL);
+	cv::createTrackbar("param2", "Settings", &param2, 200, NULL);
 
 	hsv_frame = cvCreateImage(size, IPL_DEPTH_8U, 3);
 	thresholded = cvCreateImage(size, IPL_DEPTH_8U, 1);

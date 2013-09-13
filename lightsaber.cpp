@@ -5,7 +5,33 @@
  *	Created on 8/28/2013
 /****************************************************************/
 
-#include "lightsaber.h"
+
+#include <GL/glew.h>
+#include <GL/freeglut.h>
+
+#include <opencv2/core/core.hpp>
+#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
+#include <opencv/cvaux.h>
+#include <opencv/highgui.h>
+#include <opencv/cxcore.h>
+#include <stdio.h>
+
+#include <string.h>
+#include <assert.h>
+#include <math.h>
+#include <float.h>
+#include <limits.h>
+#include <time.h>
+#include <ctype.h>
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <iostream>
+#include <fstream>
+
+using namespace cv;
+using namespace std;
 
 // Window properties
 int windowWidth = 800;
@@ -16,29 +42,41 @@ CvSize size;
 
 // Storage for circles
 CvMemStorage* storage;
-CvSeq* circles;
 
 // Saber end points
-float * saber1_b1, *saber1_b2;	
+float saber1_b1[3], saber1_b2[3];	
 
-// Default settings
-int saber1_c1 = 40;
-int saber1_c2 = 90;
-int saber1_c3 = 39;
-int saber1_cm1 = 125;
-int saber1_cm2 = 200;
-int saber1_cm3 = 172;
-int saber1_p1 = 100;
-int saber1_p2 = 38;
+// Saber1 default settings
+int saber1_c1 = 94;
+int saber1_c2 = 127;
+int saber1_c3 = 30;
+int saber1_cm1 = 119;
+int saber1_cm2 = 194;
+int saber1_cm3 = 117;
+
+// Saber 1 color
+float saber1_r = 0;
+float saber1_g = 1.0; 
+float saber1_b = 0;
 
 // Misc
-int smooth_count = 3;
+int smooth_count = 1;
+int minPoints = 5;
+int cylinderLayers = 60;
 
 // Images used for processing
 CvCapture* capture;
 IplImage* frame;
 IplImage * hsv_frame;
 IplImage * thresholded;
+
+// Containers and images.
+std::vector<cv::Vec3f> circles;
+std::vector< std::vector<cv::Point> > contours;
+std::vector< std::vector<cv::Point> > contoursPoly;
+std::vector<cv::Rect> bb;
+std::vector<cv::Point2f> center;
+std::vector<float> radius;
 
 // Video and frame
 VideoCapture videoCapture;
@@ -59,29 +97,30 @@ void renderCylinder(float x1, float y1, float z1, float x2,float y2, float z2, f
 		vz = .0001;
 	}
 
+	// Calculate distances
 	float v = sqrt( vx*vx + vy*vy + vz*vz );
 	float ax = 57.2957795*acos( vz/v );
 	if ( vz < 0.0 )
 		ax = -ax;
 	float rx = -vy*vz;
 	float ry = vx*vz;
-	
+
 	glPushMatrix();
 
-	//draw the cylinder body
-	glTranslatef( x1,y1,z1 );
-	glRotatef(ax, rx, ry, 0.0);
-	gluQuadricOrientation(quadric,GLU_OUTSIDE);
-	gluCylinder(quadric, radius, radius, v, subdivisions, 1);
+		//draw the cylinder body
+		glTranslatef( x1,y1,z1 );
+		glRotatef(ax, rx, ry, 0.0);
+		gluQuadricOrientation(quadric,GLU_OUTSIDE);
+		gluCylinder(quadric, radius, radius, v, subdivisions, 1);
 
-	//draw the first cap
-	gluQuadricOrientation(quadric,GLU_INSIDE);
-	gluDisk( quadric, 0.0, radius, subdivisions, 1);
-	glTranslatef( 0,0,v );
+		//draw the first cap
+		gluQuadricOrientation(quadric,GLU_INSIDE);
+		gluDisk( quadric, 0.0, radius, subdivisions, 1);
+		glTranslatef( 0,0,v );
 
-	//draw the second cap
-	gluQuadricOrientation(quadric,GLU_OUTSIDE);
-	gluDisk( quadric, 0.0, radius, subdivisions, 1);
+		//draw the second cap
+		gluQuadricOrientation(quadric,GLU_OUTSIDE);
+		gluDisk( quadric, 0.0, radius, subdivisions, 1);
 	glPopMatrix();
 }
 
@@ -105,139 +144,49 @@ void renderCylinder_convenient(float x1, float y1, float z1, float x2,float y2, 
 *********************************************************/
 void drawSaber(float* po1, float* po2,int width,int height){
 
-	/* TODO Cleanup*/
-
-	float* p1, *p2;
-	if (po1[2] < po2[2]){
-		p1 = po1;
-		p2 = po2;
-	}
-	else{
-		p1 = po2;
-		p2 = po1;
-	}
-
-	glPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
-	glShadeModel( GL_SMOOTH );
-	glEnable( GL_LIGHTING );
+	// p1 = smallest, p2 = largest
+	float* p1, *p2, radius, ratio;
 	
-	float r,g,b, shoulderLenght, radius;
-	r = 1.0f;
-	g = 0.0f;
-	b = 0.0f;
-	shoulderLenght = 3.0f;
-	radius = .1;
-	double ratio = width*1.0/height;
-	glDisable(GL_LIGHTING);
-	glEnable(GL_BLEND);
+	// Temporary variables
+	double x, y, aX,aY,aZ,bX,bY,bZ, rad;
+
+	// Adjust smallest and largest
+	if (po1[2] < po2[2]){ p1 = po1; p2 = po2; }
+	else{ p1 = po2; p2 = po1; }
+
+	// OpenGL settings
+	//glPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
+	//glShadeModel( GL_SMOOTH );
+	
+	radius = .1;					// set radius
+	ratio = width*1.0/height;		// ratio
+
 	glPushMatrix();
 
-		glPushMatrix();
-			
-			double x, y, aX,aY,aZ,bX,bY,bZ, rad;
-			
-			// Inside
-			glPushMatrix();
+		for (int i = 0; i < cylinderLayers; i++){
+			double ran = (rand()%101)/100.0;		
+			x = ratio*p2[0]/width;
+			y = p2[1]/height;
 
-				x = ratio*p2[0]/width;
-				y = p2[1]/height;
+			if(i == 0) rad = (.28 +  (.8*i)/(cylinderLayers))*p1[2]/width;
+			else rad = (.28 - .008*ran +  (.8*i*i*i*i*i)/(1.0*cylinderLayers*cylinderLayers*cylinderLayers*cylinderLayers*cylinderLayers))*p1[2]/width;
+			aZ = .0;
+			bZ = (((p2[2]/width)/(p1[2]/width))/(p1[2]/width))/100;
 
-				rad = .28*p1[2]/width;
-				aZ = .0;
-				bZ = (((p2[2]/width)/(p1[2]/width))/(p1[2]/width))/100;//rad * (p2[2]/width)/(p1[2]/width)*10.0;//(bz-100)/100.0;
-				//printf("%lf    %lf    %lf    %lf     %lf\n",(p2[2]/width)/(p1[2]/width), rad, ratio*p2[0]/width, (height-p2[1])/height, (y - ((.5 - y) * rad * (p2[2]/width)/(p1[2]/width)*10.0 + y)));
-			
-				aX = ratio*p1[0]/(width);
-				aY = (height - p1[1])/height;
-			
-				bX = (ratio*p2[0]/width) - (x - ((.5 - x) * bZ + x));// ratio*((bx - 100)/100.0);
-				bY = ((height - p2[1])/height) + (y - ((.5 - y) * bZ + y));//+ ((by-100)/100.0);
 
-				glColor4f(1, 1, 1, 1);
-				glScalef( 1.0f, 1.0, 1.0f );
-				renderCylinder_convenient(aX,aY,aZ,bX,bY,bZ,rad,10);
-			glPopMatrix();
+			aX = ratio*p1[0]/(width);
+			aY = (height - p1[1])/height;
 
-			
-			// Outside 1
-			glPushMatrix();
-			
-				glColor4f( r + .1, g + .1, b + .1, 1 ); 
-				x = ratio*p2[0]/width;
-				y = p2[1]/height;
-				
-				rad = .5*p1[2]/width;
-				aZ = .0;
-				bZ = (((p2[2]/width)/(p1[2]/width))/(p1[2]/width))/100;//rad * (p2[2]/width)/(p1[2]/width)*10.0;//(bz-100)/100.0;
+			bX = (ratio*p2[0]/width) - (x - ((.65 - x) * bZ + x));
+			bY = ((height - p2[1])/height) + (y - ((.5 - y) * bZ + y));
 
-				aX = ratio*p1[0]/(width);
-				aY = (height - p1[1])/height;
+			if (i == 0) glColor4f(1,1,1,1);
+			else glColor4f(saber1_r*(1-(1.0*i)/cylinderLayers), saber1_g*(1-(1.0*i)/cylinderLayers), saber1_b*(1-(1.0*i)/cylinderLayers), .20*(1-(1.0*i*i*i*i)/(cylinderLayers*cylinderLayers*cylinderLayers*cylinderLayers)));
 			
-				bX = (ratio*p2[0]/width) - (x - ((.5 - x) * bZ + x));// ratio*((bx - 100)/100.0);
-				bY = ((height - p2[1])/height) + (y - ((.5 - y) * bZ + y));//+ ((by-100)/100.0);
-				renderCylinder_convenient(aX,aY,aZ,bX,bY,bZ,rad,10);
-			glPopMatrix();
-			
-			// Outside 2
-			glPushMatrix();
-			
-				glColor4f( r, g, b, .9 ); 
-				x = ratio*p2[0]/width;
-				y = p2[1]/height;
-				
-				rad = .55*p1[2]/width;
-				aZ = .0;
-				bZ = (((p2[2]/width)/(p1[2]/width))/(p1[2]/width))/100;//rad * (p2[2]/width)/(p1[2]/width)*10.0;//(bz-100)/100.0;
+			renderCylinder_convenient(aX,aY,aZ,bX,bY,bZ,rad,10);
+		}
 
-				aX = ratio*p1[0]/(width);
-				aY = (height - p1[1])/height;
-			
-				bX = (ratio*p2[0]/width) - (x - ((.5 - x) * bZ + x));// ratio*((bx - 100)/100.0);
-				bY = ((height - p2[1])/height) + (y - ((.5 - y) * bZ + y));//+ ((by-100)/100.0);
-				renderCylinder_convenient(aX,aY,aZ,bX,bY,bZ,rad,10);
-			glPopMatrix();
-			
-			// Outside 3
-			glPushMatrix();
-			
-				glColor4f( r -.1, g-.1, b-.1, .8 ); 
-				x = ratio*p2[0]/width;
-				y = p2[1]/height;
-				
-				rad = .6*p1[2]/width;
-				aZ = .0;
-				bZ = (((p2[2]/width)/(p1[2]/width))/(p1[2]/width))/100;//rad * (p2[2]/width)/(p1[2]/width)*10.0;//(bz-100)/100.0;
-
-				aX = ratio*p1[0]/(width);
-				aY = (height - p1[1])/height;
-			
-				bX = (ratio*p2[0]/width) - (x - ((.5 - x) * bZ + x));// ratio*((bx - 100)/100.0);
-				bY = ((height - p2[1])/height) + (y - ((.5 - y) * bZ + y));//+ ((by-100)/100.0);
-				renderCylinder_convenient(aX,aY,aZ,bX,bY,bZ,rad,10);
-			glPopMatrix();
-			
-			// Outside 4
-			glPushMatrix();
-			
-				glColor4f( r -.2, g-.2, b-.2, .6 ); 
-				x = ratio*p2[0]/width;
-				y = p2[1]/height;
-				
-				rad = .65*p1[2]/width;
-				aZ = .0;
-				bZ = (((p2[2]/width)/(p1[2]/width))/(p1[2]/width))/100;//rad * (p2[2]/width)/(p1[2]/width)*10.0;//(bz-100)/100.0;
-
-				aX = ratio*p1[0]/(width);
-				aY = (height - p1[1])/height;
-			
-				bX = (ratio*p2[0]/width) - (x - ((.5 - x) * bZ + x));// ratio*((bx - 100)/100.0);
-				bY = ((height - p2[1])/height) + (y - ((.5 - y) * bZ + y));//+ ((by-100)/100.0);
-				renderCylinder_convenient(aX,aY,aZ,bX,bY,bZ,rad,10);
-			glPopMatrix();
-
-		glPopMatrix();
 	glPopMatrix();
-	glDisable(GL_BLEND);
     
 }
 
@@ -247,11 +196,12 @@ void drawSaber(float* po1, float* po2,int width,int height){
 *********************************************************/
 void init()
 {
+	
 	// Setup
-	glClearColor( 0.2f, 0.2f, 0.2f, 0.0f );
+	glClearColor( 0.4f, 0.4f, 0.4f, 0.0f );
 	glShadeModel( GL_SMOOTH );
 	glEnable( GL_DEPTH_TEST );
-	
+
 	// Texturing
 	glPixelStorei( GL_UNPACK_ALIGNMENT, 1 );
 	glGenTextures( 1, &videoTexture );
@@ -264,10 +214,12 @@ void init()
 	glHint( GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST );
 	glColorMaterial( GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE );
 	glEnable( GL_DEPTH_TEST );
-	
+
 	// Enabling blending (important for saber)
 	glEnable( GL_BLEND );
-	glBlendFunc( GL_SRC_ALPHA_SATURATE, GL_ONE );
+	glBlendFunc(GL_ONE, GL_ONE);
+	//glEnable(GL_POLYGON_STIPPLE);
+	//glBlendFunc( GL_SRC_ALPHA_SATURATE, GL_ONE );
 }
 
 
@@ -321,34 +273,24 @@ void display()
 	// Modelview setup
 	glMatrixMode( GL_MODELVIEW );
 	glLoadIdentity();
-    gluLookAt(.5, .5, 1, .5, .5, 0.0, 0.0, 1, 0 );
+    gluLookAt(.65, .5, 1, .65, .5, 0.0, 0.0, 1, 0 );
 
 	// Texturing
 	glEnable( GL_TEXTURE_2D );
 	glBindTexture( GL_TEXTURE_2D, videoTexture );	
-	texFrame = frame;
+
 	
-	// Draw light saber
-	if(saber1_b1 != NULL && saber1_b2 != NULL){
-		glDisable(GL_TEXTURE_2D);
-		glEnable(GL_BLEND);
-		glBlendFunc( GL_SRC_ALPHA_SATURATE, GL_ONE );
-		//drawSaber(saber1_b1, saber1_b2, texFrame.size().width, texFrame.size().height);
-		glDisable(GL_BLEND);
-	}
-
-
 	// Frame texture
 	if( texFrame.data){
 		glEnable(GL_TEXTURE_2D);
         glTexImage2D( GL_TEXTURE_2D, 0, GL_RGB, texFrame.size().width, texFrame.size().height, 0, GL_BGR, GL_UNSIGNED_BYTE, texFrame.data );
     }
-	
+
     glPushMatrix();
-	
+
 		// Calculate frame aspect ratio
 		double ratio = texFrame.size().width*1.0/texFrame.size().height;
-
+		
 		// Draw frame in OpenGL
 		glBegin( GL_QUADS );
 			glTexCoord2f( 0.0f, 1.0f ); glVertex3f( 0, 0.0f, 0.0f );
@@ -356,17 +298,26 @@ void display()
 			glTexCoord2f( 1.0f, 0.0f ); glVertex3f( ratio, 1.0f, 0.0f );
 			glTexCoord2f( 0.0f, 0.0f ); glVertex3f( 0, 1.0f, 0.0f );
 		glEnd();
-	
     glPopMatrix();
 
 	// Disable texturing
 	glDisable( GL_TEXTURE_2D );
 
+
+	// Draw light saber
+	if(saber1_b1 != NULL && saber1_b2 != NULL){
+		glDisable(GL_TEXTURE_2D);
+		glEnable(GL_BLEND);
+		drawSaber(saber1_b1, saber1_b2, texFrame.size().width, texFrame.size().height);
+		glDisable(GL_BLEND);
+	}
+
+
 	/*********************************************************************
 	* cvShowImage( "Camera", frame );							// original
 	* cvShowImage( "HSV", hsv_frame);							// hsv frame
 	*********************************************************************/
-	cvShowImage( "After Color Filtering", thresholded );	// thresholded 
+	
 
 	// Double buffering.
 	glutSwapBuffers();
@@ -380,9 +331,9 @@ void idle()
 {
     
 	// Saber 1 ranges
-	CvScalar hsv_min = cvScalar(saber1_c1, saber1_c2, saber1_c3, 0);
-	CvScalar hsv_max = cvScalar(saber1_cm1, saber1_cm2, saber1_cm3, 0);
-	
+	CvScalar hsv_min = cvScalar(saber1_c1, saber1_c2, saber1_c3);
+	CvScalar hsv_max = cvScalar(saber1_cm1, saber1_cm2, saber1_cm3);
+
 	// Get one frame
 	frame = cvQueryFrame( capture );
 	if( !frame ){
@@ -395,41 +346,70 @@ void idle()
 
 	// Filter out colors which are out of range
 	cvInRangeS(hsv_frame, hsv_min, hsv_max, thresholded);
-	
+
 	// Clear memory for storage and reallocate **
 	cvReleaseMemStorage(&storage);
 	storage = cvCreateMemStorage(0);
-	
+  
 	// Hough detector works better with some smoothing of the image
-	for (int i = 0; i < smooth_count; i++)
-		cvSmooth( thresholded, thresholded, CV_GAUSSIAN, 9, 9 );
-
-	circles = cvHoughCircles(thresholded, storage, CV_HOUGH_GRADIENT, 2,
-		thresholded->height/16, saber1_p1, saber1_p2, 1, 800);
-
-	
-	// Draw circles for --DEBUG
-	for (int i = 0; i < circles->total; i++){
-		
-		// Get current circle
-		float* p = (float*)cvGetSeqElem( circles, i );
-		
-		// Draw point
-		cvCircle( frame, cvPoint(cvRound(p[0]),cvRound(p[1])),
-		3, CV_RGB(0,255,0), -1, 8, 0 );
-		
-		// Draw circle
-		cvCircle( frame, cvPoint(cvRound(p[0]),cvRound(p[1])),
-		cvRound(p[2]), CV_RGB(255,0,0), 3, 8, 0 );
-	}
-	
-
-	// If circles
-	if(circles ->total == 2){
-		saber1_b1 = (float*)cvGetSeqElem( circles, 0 );
-		saber1_b2 = (float*)cvGetSeqElem( circles, 1 );
+	for (int i = 0; i < smooth_count; i++){
+		cvSmooth( thresholded, thresholded, CV_GAUSSIAN, 25, 25 );
+		cvSmooth( thresholded, thresholded, CV_MEDIAN, 25, 25 );
 	}
 
+	
+	cvShowImage( "After Color Filtering", thresholded );	// show thresholded image
+	cv::Mat thresholdImg = thresholded;						// covert to material
+    
+	
+	// Find contours
+	cv::findContours( thresholdImg, contours, CV_RETR_LIST, CV_CHAIN_APPROX_NONE );
+		
+	// Contours refinement
+	contoursPoly.resize( contours.size() );
+	bb.resize( contours.size() );
+	center.resize( contours.size() );
+	radius.resize( contours.size() );
+
+	// Refine contours and compute BB and min enclosing circle.
+	for( size_t i = 0; i < contours.size(); i++ ) { 
+		
+		// Approximates the contours
+		cv::approxPolyDP( cv::Mat( contours[i] ), contoursPoly[i], 3.0, true );
+		
+		// Calculates bounding box of a 2D point set
+		bb[i] = cv::boundingRect( cv::Mat( contoursPoly[i] ) );
+		
+		// Finds a circle with min area enclosing a 2D point set.
+		cv::minEnclosingCircle( cv::Mat( contoursPoly[i] ), center[i], radius[i] ); 
+	 }
+		
+	// Draw contours + bounding boxes + enclosing circles.
+	texFrame = frame;
+	int count = 0;
+
+	// Draw found objects
+	for( size_t i = 0; i< contours.size(); i++ ) {
+		
+		if(contoursPoly[i].size() > minPoints){
+			if(count == 0){
+				saber1_b1[0] = center[i].x;
+				saber1_b1[1] = center[i].y;
+				saber1_b1[2] = radius[i];
+			}
+			else if(count == 1){
+				saber1_b2[0] = center[i].x;
+				saber1_b2[1] = center[i].y;
+				saber1_b2[2] = radius[i];
+			}
+			cv::Scalar color = cv::Scalar( 255, 0, 255 );
+			cv::drawContours( texFrame, contoursPoly, i, color, 1, 8, std::vector<cv::Vec4i>(), 0, cv::Point() );
+			cv::rectangle( texFrame, bb[i].tl(), bb[i].br(), color, 2, 8, 0 );
+			cv::circle( texFrame, center[i], (int)radius[i], color, 2, 8, 0 ); 
+			count++;
+		}
+	}
+		
     glutPostRedisplay();
 }
 
@@ -438,25 +418,27 @@ void idle()
  * Purpose: main program
 *********************************************************/
 int main(int argc, char** argv){
-	
+
+	srand (time(NULL));
+
 	// Video cam size --FIX
 	size = cvSize(640,480);
 
 	// Open capture device
 	capture = cvCaptureFromCAM( 1 );
-	
+
 	// Check for opening error
 	if( !capture ){
 		fprintf( stderr, "ERROR: capture is NULL \n" );
 		return -1;
 	}
-	
+
 	/****************************************************************
 	* cvNamedWindow( "Camera", CV_WINDOW_AUTOSIZE );
 	* cvNamedWindow( "HSV", CV_WINDOW_AUTOSIZE );
 	* cvNamedWindow( "EdgeDetection", CV_WINDOW_AUTOSIZE );
 	****************************************************************/
-	cv::namedWindow("Settings", CV_WINDOW_AUTOSIZE);
+	cv::namedWindow("Settings", CV_WINDOW_NORMAL);
 
 	// Settings page 
 	cv::createTrackbar("c1", "Settings", &saber1_c1, 255, NULL);
@@ -465,13 +447,15 @@ int main(int argc, char** argv){
 	cv::createTrackbar("cm1", "Settings", &saber1_cm1, 255, NULL);
 	cv::createTrackbar("cm2", "Settings", &saber1_cm2, 255, NULL);
 	cv::createTrackbar("cm3", "Settings", &saber1_cm3, 255, NULL);
-	cv::createTrackbar("param1", "Settings", &saber1_p1, 200, NULL);
-	cv::createTrackbar("param2", "Settings", &saber1_p2, 200, NULL);
+	cv::createTrackbar("smooth", "Settings", &smooth_count, 15, NULL);
+	cv::createTrackbar("min points", "Settings", &minPoints, 80, NULL);
+	cv::createTrackbar("cylinder", "Settings", &cylinderLayers, 100, NULL);
+
 
 	// Modified images
 	hsv_frame = cvCreateImage(size, IPL_DEPTH_8U, 3);
 	thresholded = cvCreateImage(size, IPL_DEPTH_8U, 1);
-	
+
 	// Setup the glut window
     glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_DOUBLE|GLUT_RGBA|GLUT_DEPTH);

@@ -40,11 +40,9 @@ int windowX = 100;
 int windowY = 100;
 CvSize size;
 
-// Storage for circles
-CvMemStorage* storage;
-
 // Saber end points
 float saber1_b1[3], saber1_b2[3];	
+float saber2_b1[3], saber2_b2[3];
 
 // Saber1 default settings
 int saber1_c1 = 94;
@@ -59,24 +57,39 @@ float saber1_r = 0;
 float saber1_g = 1.0; 
 float saber1_b = 0;
 
+// Saber 2 default settings
+int saber2_c1 = 134;
+int saber2_c2 = 98;
+int saber2_c3 = 20;
+int saber2_cm1 = 146;
+int saber2_cm2 = 151;
+int saber2_cm3 = 93;
+
+// Saber 2 color
+float saber2_r = 1.0;
+float saber2_g = 0.0; 
+float saber2_b = 0;
+
 // Misc
 int smooth_count = 1;
 int minPoints = 5;
 int cylinderLayers = 60;
+bool showThres1 = false;
+bool showThres2 = false;
 
 // Images used for processing
 CvCapture* capture;
 IplImage* frame;
 IplImage * hsv_frame;
-IplImage * thresholded;
+IplImage * thresholded_1, *thresholded_2;
 
 // Containers and images.
-std::vector<cv::Vec3f> circles;
-std::vector< std::vector<cv::Point> > contours;
-std::vector< std::vector<cv::Point> > contoursPoly;
-std::vector<cv::Rect> bb;
-std::vector<cv::Point2f> center;
-std::vector<float> radius;
+std::vector<cv::Vec3f> circles_1, circles_2;
+std::vector< std::vector<cv::Point> > contours_1, contours_2;
+std::vector< std::vector<cv::Point> > contoursPoly_1, contoursPoly_2;
+std::vector<cv::Rect> bb_1, bb_2;
+std::vector<cv::Point2f> center_1, center_2;
+std::vector<float> radius_1, radius_2;
 
 // Video and frame
 VideoCapture videoCapture;
@@ -142,7 +155,10 @@ void renderCylinder_convenient(float x1, float y1, float z1, float x2,float y2, 
  * Method: drawSaber
  * Purpose: draws the lightsaber scene
 *********************************************************/
-void drawSaber(float* po1, float* po2,int width,int height){
+void drawSaber(float* po1, float* po2, float r, float g, float b){
+
+	int width = texFrame.size().width;
+	int height =texFrame.size().height;
 
 	// p1 = smallest, p2 = largest
 	float* p1, *p2, radius, ratio;
@@ -181,7 +197,7 @@ void drawSaber(float* po1, float* po2,int width,int height){
 			bY = ((height - p2[1])/height) + (y - ((.5 - y) * bZ + y));
 
 			if (i == 0) glColor4f(1,1,1,1);
-			else glColor4f(saber1_r*(1-(1.0*i)/cylinderLayers), saber1_g*(1-(1.0*i)/cylinderLayers), saber1_b*(1-(1.0*i)/cylinderLayers), .20*(1-(1.0*i*i*i*i)/(cylinderLayers*cylinderLayers*cylinderLayers*cylinderLayers)));
+			else glColor4f(r*(1-(1.0*i)/cylinderLayers), g*(1-(1.0*i)/cylinderLayers), b*(1-(1.0*i)/cylinderLayers), .20*(1-(1.0*i*i*i*i)/(cylinderLayers*cylinderLayers*cylinderLayers*cylinderLayers)));
 			
 			renderCylinder_convenient(aX,aY,aZ,bX,bY,bZ,rad,10);
 		}
@@ -242,6 +258,56 @@ void keyboard( unsigned char key, int x, int y )
 {
 	switch( key )
     {
+		case '1':{
+			
+			if(!showThres1){
+				
+				cv::namedWindow("Saber - 1", CV_WINDOW_NORMAL);
+
+				// Settings page 
+				cv::createTrackbar("c1", "Saber - 1", &saber1_c1, 255, NULL);
+				cv::createTrackbar("c2", "Saber - 1", &saber1_c2, 255, NULL);
+				cv::createTrackbar("c3", "Saber - 1", &saber1_c3, 255, NULL);
+				cv::createTrackbar("cm1", "Saber - 1", &saber1_cm1, 255, NULL);
+				cv::createTrackbar("cm2", "Saber - 1", &saber1_cm2, 255, NULL);
+				cv::createTrackbar("cm3", "Saber - 1", &saber1_cm3, 255, NULL);
+				cv::createTrackbar("smooth", "Saber - 1", &smooth_count, 15, NULL);
+				cv::createTrackbar("min points", "Saber - 1", &minPoints, 80, NULL);
+				cv::createTrackbar("cylinder", "Saber - 1", &cylinderLayers, 100, NULL);
+			}
+			else {
+				cvDestroyWindow("Saber - 1");
+				cvDestroyWindow("Threshold - 1");
+			}
+
+			showThres1 = !showThres1;
+			break;
+		}
+		case '2':{
+			
+			if(!showThres2){
+				
+				cv::namedWindow("Saber - 2", CV_WINDOW_NORMAL);
+
+				// Settings page 
+				cv::createTrackbar("c1", "Saber - 2", &saber2_c1, 255, NULL);
+				cv::createTrackbar("c2", "Saber - 2", &saber2_c2, 255, NULL);
+				cv::createTrackbar("c3", "Saber - 2", &saber2_c3, 255, NULL);
+				cv::createTrackbar("cm1", "Saber - 2", &saber2_cm1, 255, NULL);
+				cv::createTrackbar("cm2", "Saber - 2", &saber2_cm2, 255, NULL);
+				cv::createTrackbar("cm3", "Saber - 2", &saber2_cm3, 255, NULL);
+				cv::createTrackbar("smooth", "Saber - 2", &smooth_count, 15, NULL);
+				cv::createTrackbar("min points", "Saber - 2", &minPoints, 80, NULL);
+				cv::createTrackbar("cylinder", "Saber - 2", &cylinderLayers, 100, NULL);
+			}
+			else {
+				cvDestroyWindow("Saber - 2");
+				cvDestroyWindow("Threshold - 2");
+			}
+
+			showThres2 = !showThres2;
+			break;
+		}
 		case 'q':{
 			exit(1);
 			break;
@@ -308,7 +374,8 @@ void display()
 	if(saber1_b1 != NULL && saber1_b2 != NULL){
 		glDisable(GL_TEXTURE_2D);
 		glEnable(GL_BLEND);
-		drawSaber(saber1_b1, saber1_b2, texFrame.size().width, texFrame.size().height);
+		drawSaber(saber1_b1, saber1_b2, saber1_r, saber1_g, saber1_b);
+		drawSaber(saber2_b1, saber2_b2, saber2_r, saber2_g, saber2_b);
 		glDisable(GL_BLEND);
 	}
 
@@ -330,10 +397,6 @@ void display()
 void idle()
 {
     
-	// Saber 1 ranges
-	CvScalar hsv_min = cvScalar(saber1_c1, saber1_c2, saber1_c3);
-	CvScalar hsv_max = cvScalar(saber1_cm1, saber1_cm2, saber1_cm3);
-
 	// Get one frame
 	frame = cvQueryFrame( capture );
 	if( !frame ){
@@ -341,47 +404,51 @@ void idle()
 		exit(-1);
 	}
 
+	/**************************************************************************
+	 * Saber 1 Detection here
+	/*************************************************************************/
+
 	// Covert color space to HSV
 	cvCvtColor(frame, hsv_frame, CV_BGR2HSV);
 
-	// Filter out colors which are out of range
-	cvInRangeS(hsv_frame, hsv_min, hsv_max, thresholded);
+	// Saber 1 ranges
+	CvScalar hsv_min = cvScalar(saber1_c1, saber1_c2, saber1_c3);
+	CvScalar hsv_max = cvScalar(saber1_cm1, saber1_cm2, saber1_cm3);
 
-	// Clear memory for storage and reallocate **
-	cvReleaseMemStorage(&storage);
-	storage = cvCreateMemStorage(0);
-  
-	// Hough detector works better with some smoothing of the image
+	// Filter out colors which are out of range
+	cvInRangeS(hsv_frame, hsv_min, hsv_max, thresholded_1);
+
+	// Detector works better with some smoothing of the image
 	for (int i = 0; i < smooth_count; i++){
-		cvSmooth( thresholded, thresholded, CV_GAUSSIAN, 25, 25 );
-		cvSmooth( thresholded, thresholded, CV_MEDIAN, 25, 25 );
+		cvSmooth( thresholded_1, thresholded_1, CV_GAUSSIAN, 9, 9 );
+		cvSmooth( thresholded_1, thresholded_1, CV_MEDIAN, 9, 9 );
 	}
 
 	
-	cvShowImage( "After Color Filtering", thresholded );	// show thresholded image
-	cv::Mat thresholdImg = thresholded;						// covert to material
+	if(cvGetWindowHandle("Saber - 1")) cvShowImage( "Threshold - 1", thresholded_1 );
+	cv::Mat thresholdImg = thresholded_1;
     
 	
 	// Find contours
-	cv::findContours( thresholdImg, contours, CV_RETR_LIST, CV_CHAIN_APPROX_NONE );
+	cv::findContours( thresholdImg, contours_1, CV_RETR_LIST, CV_CHAIN_APPROX_NONE );
 		
 	// Contours refinement
-	contoursPoly.resize( contours.size() );
-	bb.resize( contours.size() );
-	center.resize( contours.size() );
-	radius.resize( contours.size() );
+	contoursPoly_1.resize( contours_1.size() );
+	bb_1.resize( contours_1.size() );
+	center_1.resize( contours_1.size() );
+	radius_1.resize( contours_1.size() );
 
 	// Refine contours and compute BB and min enclosing circle.
-	for( size_t i = 0; i < contours.size(); i++ ) { 
+	for( size_t i = 0; i < contours_1.size(); i++ ) { 
 		
 		// Approximates the contours
-		cv::approxPolyDP( cv::Mat( contours[i] ), contoursPoly[i], 3.0, true );
+		cv::approxPolyDP( cv::Mat( contours_1[i] ), contoursPoly_1[i], 3.0, true );
 		
 		// Calculates bounding box of a 2D point set
-		bb[i] = cv::boundingRect( cv::Mat( contoursPoly[i] ) );
+		bb_1[i] = cv::boundingRect( cv::Mat( contoursPoly_1[i] ) );
 		
 		// Finds a circle with min area enclosing a 2D point set.
-		cv::minEnclosingCircle( cv::Mat( contoursPoly[i] ), center[i], radius[i] ); 
+		cv::minEnclosingCircle( cv::Mat( contoursPoly_1[i] ), center_1[i], radius_1[i] ); 
 	 }
 		
 	// Draw contours + bounding boxes + enclosing circles.
@@ -389,27 +456,99 @@ void idle()
 	int count = 0;
 
 	// Draw found objects
-	for( size_t i = 0; i< contours.size(); i++ ) {
+	for( size_t i = 0; i< contours_1.size(); i++ ) {
 		
-		if(contoursPoly[i].size() > minPoints){
+		if(contoursPoly_1[i].size() > minPoints){
 			if(count == 0){
-				saber1_b1[0] = center[i].x;
-				saber1_b1[1] = center[i].y;
-				saber1_b1[2] = radius[i];
+				saber1_b1[0] = center_1[i].x;
+				saber1_b1[1] = center_1[i].y;
+				saber1_b1[2] = radius_1[i];
 			}
 			else if(count == 1){
-				saber1_b2[0] = center[i].x;
-				saber1_b2[1] = center[i].y;
-				saber1_b2[2] = radius[i];
+				saber1_b2[0] = center_1[i].x;
+				saber1_b2[1] = center_1[i].y;
+				saber1_b2[2] = radius_1[i];
 			}
 			cv::Scalar color = cv::Scalar( 255, 0, 255 );
-			cv::drawContours( texFrame, contoursPoly, i, color, 1, 8, std::vector<cv::Vec4i>(), 0, cv::Point() );
-			cv::rectangle( texFrame, bb[i].tl(), bb[i].br(), color, 2, 8, 0 );
-			cv::circle( texFrame, center[i], (int)radius[i], color, 2, 8, 0 ); 
+			cv::drawContours( texFrame, contoursPoly_1, i, color, 1, 8, std::vector<cv::Vec4i>(), 0, cv::Point() );
+			cv::rectangle( texFrame, bb_1[i].tl(), bb_1[i].br(), color, 2, 8, 0 );
+			cv::circle( texFrame, center_1[i], (int)radius_1[i], color, 2, 8, 0 ); 
 			count++;
 		}
 	}
 		
+
+	/**************************************************************************
+	 * Saber 2 Detection here
+	/*************************************************************************/
+	
+	// Saber 1 ranges
+	CvScalar hsv_min_2 = cvScalar(saber2_c1, saber2_c2, saber2_c3);
+	CvScalar hsv_max_2 = cvScalar(saber2_cm1, saber2_cm2, saber2_cm3);
+
+	// Filter out colors which are out of range
+	cvInRangeS(hsv_frame, hsv_min_2, hsv_max_2, thresholded_2);
+
+	// Detector works better with some smoothing of the image
+	for (int i = 0; i < smooth_count; i++){
+		cvSmooth( thresholded_2, thresholded_2, CV_GAUSSIAN, 9, 9 );
+		cvSmooth( thresholded_2, thresholded_2, CV_MEDIAN, 9, 9 );
+	}
+
+	
+	if(cvGetWindowHandle("Saber - 2")) cvShowImage( "Threshold - 2", thresholded_2 );
+	cv::Mat thresholdImg_2 = thresholded_2;
+    
+	
+	// Find contours
+	cv::findContours( thresholdImg_2, contours_2, CV_RETR_LIST, CV_CHAIN_APPROX_NONE );
+		
+	// Contours refinement
+	contoursPoly_2.resize( contours_2.size() );
+	bb_2.resize( contours_2.size() );
+	center_2.resize( contours_2.size() );
+	radius_2.resize( contours_2.size() );
+
+	// Refine contours and compute BB and min enclosing circle.
+	for( size_t i = 0; i < contours_2.size(); i++ ) { 
+		
+		// Approximates the contours
+		cv::approxPolyDP( cv::Mat( contours_2[i] ), contoursPoly_2[i], 3.0, true );
+		
+		// Calculates bounding box of a 2D point set
+		bb_2[i] = cv::boundingRect( cv::Mat( contoursPoly_2[i] ) );
+		
+		// Finds a circle with min area enclosing a 2D point set.
+		cv::minEnclosingCircle( cv::Mat( contoursPoly_2[i] ), center_2[i], radius_2[i] ); 
+	 }
+		
+	// Draw contours + bounding boxes + enclosing circles.
+	texFrame = frame;
+	count = 0;
+
+	// Draw found objects
+	for( size_t i = 0; i< contours_2.size(); i++ ) {
+		
+		if(contoursPoly_2[i].size() > minPoints){
+			if(count == 0){
+				saber2_b1[0] = center_2[i].x;
+				saber2_b1[1] = center_2[i].y;
+				saber2_b1[2] = radius_2[i];
+			}
+			else if(count == 1){
+				saber2_b2[0] = center_2[i].x;
+				saber2_b2[1] = center_2[i].y;
+				saber2_b2[2] = radius_2[i];
+			}
+			cv::Scalar color = cv::Scalar( 255, 0, 255 );
+			cv::drawContours( texFrame, contoursPoly_2, i, color, 1, 8, std::vector<cv::Vec4i>(), 0, cv::Point() );
+			cv::rectangle( texFrame, bb_2[i].tl(), bb_2[i].br(), color, 2, 8, 0 );
+			cv::circle( texFrame, center_2[i], (int)radius_2[i], color, 2, 8, 0 ); 
+			count++;
+		}
+	}
+
+
     glutPostRedisplay();
 }
 
@@ -438,23 +577,11 @@ int main(int argc, char** argv){
 	* cvNamedWindow( "HSV", CV_WINDOW_AUTOSIZE );
 	* cvNamedWindow( "EdgeDetection", CV_WINDOW_AUTOSIZE );
 	****************************************************************/
-	cv::namedWindow("Settings", CV_WINDOW_NORMAL);
-
-	// Settings page 
-	cv::createTrackbar("c1", "Settings", &saber1_c1, 255, NULL);
-	cv::createTrackbar("c2", "Settings", &saber1_c2, 255, NULL);
-	cv::createTrackbar("c3", "Settings", &saber1_c3, 255, NULL);
-	cv::createTrackbar("cm1", "Settings", &saber1_cm1, 255, NULL);
-	cv::createTrackbar("cm2", "Settings", &saber1_cm2, 255, NULL);
-	cv::createTrackbar("cm3", "Settings", &saber1_cm3, 255, NULL);
-	cv::createTrackbar("smooth", "Settings", &smooth_count, 15, NULL);
-	cv::createTrackbar("min points", "Settings", &minPoints, 80, NULL);
-	cv::createTrackbar("cylinder", "Settings", &cylinderLayers, 100, NULL);
-
 
 	// Modified images
 	hsv_frame = cvCreateImage(size, IPL_DEPTH_8U, 3);
-	thresholded = cvCreateImage(size, IPL_DEPTH_8U, 1);
+	thresholded_1 = cvCreateImage(size, IPL_DEPTH_8U, 1);
+	thresholded_2 = cvCreateImage(size, IPL_DEPTH_8U, 1);
 
 	// Setup the glut window
     glutInit(&argc, argv);

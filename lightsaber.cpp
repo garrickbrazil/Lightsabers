@@ -39,9 +39,6 @@ int windowWidth = 800;
 int windowHeight = 600;
 int windowX = 100;
 int windowY = 100;
-//ring added
-//CvSize size;
-//end ring added
 
 // Animation timing
 int lastTime_1 = 0.0;
@@ -50,19 +47,19 @@ float portionDrawn_1 = 0.0;
 float portionDrawn_2 = 0.0;
 bool saber1 = false;
 bool saber2 = false;
-float aniTime = 2000;
+float aniTime = 280;
 
 // Saber end points
 float saber1_b1[3], saber1_b2[3];
 float saber2_b1[3], saber2_b2[3];
 
 // Saber1 default settings
-int saber1_c1 = 94;
-int saber1_c2 = 127;
-int saber1_c3 = 30;
-int saber1_cm1 = 119;
-int saber1_cm2 = 194;
-int saber1_cm3 = 117;
+int saber1_c1 = 53;
+int saber1_c2 = 75;
+int saber1_c3 = 65;
+int saber1_cm1 = 83;
+int saber1_cm2 = 174;
+int saber1_cm3 = 207;
 
 // Saber 1 color
 float saber1_r = 0;
@@ -70,12 +67,12 @@ float saber1_g = 1.0;
 float saber1_b = 0;
 
 // Saber 2 default settings
-int saber2_c1 = 134;
-int saber2_c2 = 98;
-int saber2_c3 = 20;
-int saber2_cm1 = 146;
-int saber2_cm2 = 151;
-int saber2_cm3 = 93;
+int saber2_c1 = 138;
+int saber2_c2 = 64;
+int saber2_c3 = 22;
+int saber2_cm1 = 162;
+int saber2_cm2 = 148;
+int saber2_cm3 = 71;
 
 // Saber 2 color
 float saber2_r = 1.0;
@@ -88,13 +85,18 @@ int minPoints = 5;
 int cylinderLayers = 60;
 bool showThres1 = false;
 bool showThres2 = false;
-const int blurCount = 3;
+const int blurCount = 4;
+int minRad = 6;
 
+double s1_b1_dX = 0, s1_b1_dY;
+double s2_b1_dX = 0, s2_b1_dY;
 
 //ring added
 // Past saber end points
-float saber1_b1_past[blurCount][3] = {0}, saber1_b2_past[blurCount][3] = {0};
-float saber2_b1_past[blurCount][3] = {0}, saber2_b2_past[blurCount][3] = {0};
+float saber1_b1_past[3][3] = {0}, saber1_b2_past[3][3] = {0};
+float saber2_b1_past[3][3] = {0}, saber2_b2_past[3][3] = {0};
+float saber1_b1_inter[blurCount*blurCount][3] = {0}, saber1_b2_inter[blurCount*blurCount][3] = {0};
+float saber2_b1_inter[blurCount*blurCount][3] = {0}, saber2_b2_inter[blurCount*blurCount][3] = {0};
 //end ring added
 
 
@@ -116,6 +118,17 @@ std::vector<float> radius_1, radius_2;
 VideoCapture videoCapture;
 Mat texFrame;
 GLuint videoTexture;
+
+
+double distance(float *p1, float x, float y){
+	float dx = x - p1[0];
+	float dy = y - p1[1];
+
+	double distance = sqrt(pow(dx,2) + pow(dy,2));
+
+	return distance;
+}
+
 
 /*********************************************************
  * Method: renderCylinder
@@ -177,7 +190,7 @@ void renderCylinder_convenient(float x1, float y1, float z1, float x2,float y2, 
  * Purpose: draws the lightsaber scene
  *********************************************************/
 void drawSaber(float* po1, float* po2, float r, float g, float b, double trans, float portion){
-    
+    //trans = .7;
 	int width = texFrame.size().width;
 	int height =texFrame.size().height;
     
@@ -191,13 +204,10 @@ void drawSaber(float* po1, float* po2, float r, float g, float b, double trans, 
 	if (po1[2] < po2[2]){ p1 = po1; p2 = po2; }
 	else{ p1 = po2; p2 = po1; }
     
-	// OpenGL settings
-	//glPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
-	//glShadeModel( GL_SMOOTH );
+	ratio = width*1.0/height;
     
-	radius = .1;					// set radius
-	ratio = width*1.0/height;		// ratio
-    
+	if(p1[1] > p2[1]){
+
 	glPushMatrix();
     
     for (int i = 0; i < cylinderLayers; i++){
@@ -205,27 +215,63 @@ void drawSaber(float* po1, float* po2, float r, float g, float b, double trans, 
         x = ratio*p2[0]/width;
         y = p2[1]/height;
         
-        if(i == 0) rad = (.28 +  (.8*i)/(cylinderLayers))*p1[2]/width;
-        else rad = (.28 - .008*ran +  (.8*i*i*i*i*i)/(1.0*cylinderLayers*cylinderLayers*cylinderLayers*cylinderLayers*cylinderLayers))*p1[2]/width;
+        if(i == 0) rad = (.28 +  (1.1*i)/(cylinderLayers))*p1[2]/width;
+        else rad = (.28 - .008*ran +  (1.1*i*i*i*i*i)/(1.0*cylinderLayers*cylinderLayers*cylinderLayers*cylinderLayers*cylinderLayers))*p1[2]/width;
         aZ = .0;
-        bZ = (((p2[2]/width)/(p1[2]/width))/(p1[2]/width))/100;
-        bZ *= portion;
+        bZ = 1.2*(((p2[2]/width)/(p1[2]/width))/(p1[2]/width))/100;
         
         aX = ratio*p1[0]/(width);
         aY = (height - p1[1])/height;
-        
-        bX = (ratio*p2[0]/width) - (x - ((.65 - x) * bZ + x));
-        bY = ((height - p2[1])/height) + (y - ((.5 - y) * bZ + y));
+        bZ *= portion;
+        bX = (ratio*p2[0]/width -aX)*portion + aX - (x - ((.65 - x) * bZ + x));
+        bY = ((height - p2[1])/height - aY)*portion +aY + (y - ((.5 - y) * bZ + y));
         
 
-        if (i == 0) glColor4f(1,1,1,1*trans);
-        else glColor4f(r*(1-(1.0*i)/cylinderLayers)*trans, g*(1-(1.0*i)/cylinderLayers)*trans, b*(1-(1.0*i)/cylinderLayers)*trans, 1*trans);
+        if (i == 0 && trans != 1) glColor4f(1*trans,1*trans,1*trans,1);
+		else if (i == 0 && trans == 1) glColor4f(1,1,1,1);
+        else glColor4f(r*(1-(1.0*i)/cylinderLayers)*trans, g*(1-(1.0*i)/cylinderLayers)*trans, b*(1-(1.0*i)/cylinderLayers)*trans, 1);
         
         renderCylinder_convenient(aX,aY,aZ,bX,bY,bZ,rad,10);
     }
     
 	glPopMatrix();
-	
+	}
+
+	else{
+
+		glPushMatrix();
+    
+    for (int i = 0; i < cylinderLayers; i++){
+        double ran = (rand()%101)/100.0;
+        x = ratio*p2[0]/width;
+        y = p2[1]/height;
+        
+        if(i == 0) rad = (.28 +  (1.1*i)/(cylinderLayers))*p1[2]/width;
+        else rad = (.28 - .008*ran +  (1.1*i*i*i*i*i)/(1.0*cylinderLayers*cylinderLayers*cylinderLayers*cylinderLayers*cylinderLayers))*p1[2]/width;
+        aZ = .0;
+        bZ = 1.2*(((p2[2]/width)/(p1[2]/width))/(p1[2]/width))/100;
+        
+		bX = (ratio*p2[0]/width) - (x - ((.65 - x) * bZ + x));
+        bY = ((height - p2[1])/height) + (y - ((.5 - y) * bZ + y));
+		
+		aZ = bZ*(1-portion);
+
+        aX = ratio*p1[0]/(width);
+        aY = (height - p1[1])/height;
+		
+		aX += (bX - aX)*(1 - portion);
+		aY += (bY - aY)*(1 - portion);
+        
+        if (i == 0 && trans != 1) glColor4f(1*trans,1*trans,1*trans,1);
+		else if (i == 0 && trans == 1) glColor4f(1,1,1,1);
+        else glColor4f(r*(1-(1.0*i)/cylinderLayers)*trans, g*(1-(1.0*i)/cylinderLayers)*trans, b*(1-(1.0*i)/cylinderLayers)*trans, 1);
+        
+        renderCylinder_convenient(aX,aY,aZ,bX,bY,bZ,rad,10);
+    }
+    
+	glPopMatrix();
+
+	}
 }
 
 /*********************************************************
@@ -260,7 +306,6 @@ void init()
 	//glBlendFunc( GL_SRC_ALPHA_SATURATE, GL_ONE );
 }
 
-
 /*********************************************************
  * Method: reshape
  * Purpose: occures when window resizes
@@ -280,7 +325,7 @@ void keyboard( unsigned char key, int x, int y )
 {
 	switch( key )
     {
-		case '!':{
+		case '1':{
 			if(!saber1){
 				lastTime_1 = glutGet( GLUT_ELAPSED_TIME );
 				portionDrawn_1 = 0;
@@ -292,11 +337,19 @@ void keyboard( unsigned char key, int x, int y )
 			saber1 = !saber1;
 			break;
 		}
-		case '@':{
-			
+		case '2':{
+			if(!saber2){
+				lastTime_2 = glutGet( GLUT_ELAPSED_TIME );
+				portionDrawn_2 = 0;
+			}
+			else {
+				portionDrawn_2 = 0;
+			}
+
+			saber2 = !saber2;
 			break;
 		}
-		case '1':{
+		case '!':{
             
 			if(!showThres1){
                 
@@ -312,6 +365,7 @@ void keyboard( unsigned char key, int x, int y )
 				cv::createTrackbar("smooth", "Saber - 1", &smooth_count, 15, NULL);
 				cv::createTrackbar("min points", "Saber - 1", &minPoints, 80, NULL);
 				cv::createTrackbar("cylinder", "Saber - 1", &cylinderLayers, 100, NULL);
+				cv::createTrackbar("Dil/ero", "Saber - 1", &minRad, 40, NULL);
 			}
 			else {
 				cvDestroyWindow("Saber - 1");
@@ -321,7 +375,7 @@ void keyboard( unsigned char key, int x, int y )
 			showThres1 = !showThres1;
 			break;
 		}
-		case '2':{
+		case '@':{
             
 			if(!showThres2){
                 
@@ -413,19 +467,18 @@ void display()
 		glDisable(GL_TEXTURE_2D);
 		glEnable(GL_BLEND);
 		
-		if(saber1)drawSaber(saber1_b1, saber1_b2, saber1_r, saber1_g, saber1_b, 1, portionDrawn_1);
-		if(saber2)drawSaber(saber2_b1, saber2_b2, saber2_r, saber2_g, saber2_b, 1, portionDrawn_2);
-        
+		if(saber1 && portionDrawn_1 > .1)drawSaber(saber1_b1, saber1_b2, saber1_r, saber1_g, saber1_b, 1, portionDrawn_1);
+		if(saber2 && portionDrawn_2 > .1)drawSaber(saber2_b1, saber2_b2, saber2_r, saber2_g, saber2_b, 1, portionDrawn_2);
+		
 
         //ring added
-        for (int i = 0; i < blurCount; i++)
+        for (int i = 0; i < blurCount*blurCount; i++)
         {
-            if(saber1)drawSaber(saber1_b1_past[i], saber1_b2_past[i], saber1_r, saber1_g, saber1_b, .5, portionDrawn_1);
-            if(saber2)drawSaber(saber2_b1_past[i], saber2_b2_past[i], saber2_r, saber2_g, saber2_b, 1 -pow(((i+1)*1.0)/(1.0*blurCount), 3), portionDrawn_2);
+            if(saber1 && (abs(s1_b1_dX) > .3 || abs(s1_b1_dY) > .3)) drawSaber(saber1_b1_inter[i], saber1_b2_inter[i], saber1_r, saber1_g, saber1_b, 1-(i*1.0/(blurCount*blurCount)), portionDrawn_1);
+            if(saber2 && (abs(s2_b1_dX) > .3 || abs(s2_b1_dY) > .3)) drawSaber(saber2_b1_inter[i], saber2_b2_inter[i], saber2_r, saber2_g, saber2_b, 1-(i*1.0/(blurCount*blurCount)), portionDrawn_2);
         }
         //end ring added
-        
-
+		
 		glDisable(GL_BLEND);
 	}
     
@@ -456,8 +509,6 @@ void idle()
 		if(portionDrawn_1 > 1){
 			portionDrawn_1 = 1;
 		}
-
-		//lastTime_ = currTime;
 	}
 
 	if(saber2 && portionDrawn_2 < 1){
@@ -468,10 +519,7 @@ void idle()
 			portionDrawn_2 = 1;
 		}
 
-		//lastTime_2 = currTime;
 	}
-
-	printf("%lf\n", portionDrawn_1);
 
 	// Get one frame
 	frame = cvQueryFrame( capture );
@@ -494,19 +542,26 @@ void idle()
 	// Filter out colors which are out of range
 	cvInRangeS(hsv_frame, hsv_min, hsv_max, thresholded_1);
     
+	cv::Mat se21 = cv::getStructuringElement( CV_SHAPE_RECT, cv::Size( 21, 21 ), cv::Point( 10, 10 ) );
+	cv::Mat se11 = cv::getStructuringElement( CV_SHAPE_RECT, cv::Size( 11, 11 ), cv::Point( 5, 5 ) );
+		
+
 	// Detector works better with some smoothing of the image
 	for (int i = 0; i < smooth_count; i++){
-		cvSmooth( thresholded_1, thresholded_1, CV_GAUSSIAN, 9, 9 );
-		cvSmooth( thresholded_1, thresholded_1, CV_MEDIAN, 9, 9 );
+		//cvSmooth( thresholded_1, thresholded_1, CV_GAUSSIAN, 5, 5 );
+		cvSmooth( thresholded_1, thresholded_1, CV_MEDIAN, 3,3 );
 	}
     
-    
 	if(cvGetWindowHandle("Saber - 1")) cvShowImage( "Threshold - 1", thresholded_1 );
+
+	cvErode(thresholded_1,thresholded_1,NULL,1);
+    cvDilate( thresholded_1, thresholded_1, NULL, 9 );
+	cvSmooth( thresholded_1, thresholded_1, CV_MEDIAN, 9, 9 );
+
 	cv::Mat thresholdImg = thresholded_1;
     
-    
 	// Find contours
-	cv::findContours( thresholdImg, contours_1, CV_RETR_LIST, CV_CHAIN_APPROX_NONE );
+	cv::findContours( thresholdImg, contours_1, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_TC89_L1 );
     
 	// Contours refinement
 	contoursPoly_1.resize( contours_1.size() );
@@ -519,10 +574,10 @@ void idle()
         
 		// Approximates the contours
 		cv::approxPolyDP( cv::Mat( contours_1[i] ), contoursPoly_1[i], 3.0, true );
-        
+
 		// Calculates bounding box of a 2D point set
 		bb_1[i] = cv::boundingRect( cv::Mat( contoursPoly_1[i] ) );
-        
+ 
 		// Finds a circle with min area enclosing a 2D point set.
 		cv::minEnclosingCircle( cv::Mat( contoursPoly_1[i] ), center_1[i], radius_1[i] );
     }
@@ -530,9 +585,92 @@ void idle()
 	// Draw contours + bounding boxes + enclosing circles.
 	texFrame = frame;
 	int count = 0;
-    
+	int index1 = -1;
+	int index2 = -1;
+
+	// Draw found objects
+	for( size_t i = 0; i< contours_1.size(); i++ ) {
+        
+		if(contoursPoly_1[i].size() > minPoints){
+			if(count == 0){
+				//saber1_b1[0] = center_1[i].x;
+				//saber1_b1[1] = center_1[i].y;
+				//saber1_b1[2] = radius_1[i];
+				index1 = i;
+				count++;
+			}
+			else if(count == 1){
+				//saber1_b2[0] = center_1[i].x;
+				//saber1_b2[1] = center_1[i].y;
+				//saber1_b2[2] = radius_1[i];
+				index2 = i;
+				count++;
+			}
+			/*
+			cv::Scalar color = cv::Scalar( 255, 0, 255 );
+			cv::drawContours( texFrame, contoursPoly_1, i, color, 1, 8, std::vector<cv::Vec4i>(), 0, cv::Point() );
+			cv::rectangle( texFrame, bb_1[i].tl(), bb_1[i].br(), color, 2, 8, 0 );
+			cv::circle( texFrame, center_1[i], (int)radius_1[i], color, 2, 8, 0 );
+			*/
+		}
+	}
+
+	if(index1 >= 0 && index2 >= 0){
+		if(saber1_b1 != NULL && saber1_b2 != NULL){
+			double distance1_1 = distance(saber1_b1, center_1[index1].x, center_1[index1].y);
+			double distance2_1 = distance(saber1_b2, center_1[index1].x, center_1[index1].y);
+			double distance1_2 = distance(saber1_b1, center_1[index2].x, center_1[index2].y);
+			double distance2_2 = distance(saber1_b2, center_1[index2].x, center_1[index2].y);
+			//printf("%lf, %lf, %lf, %lf\n", distance1_1, distance2_1, distance1_2, distance2_2);
+			if(distance1_1 <= distance2_1 && distance1_1 <= distance1_2 && distance1_1 <= distance2_2){
+				saber1_b1[0] = center_1[index1].x;
+				saber1_b1[1] = center_1[index1].y;
+				saber1_b1[2] = radius_1[index1];
+
+				saber1_b2[0] = center_1[index2].x;
+				saber1_b2[1] = center_1[index2].y;
+				saber1_b2[2] = radius_1[index2];
+			}
+			else if(distance1_2 <= distance2_1 && distance1_2 <= distance1_1 && distance1_2 <= distance2_2){
+				saber1_b1[0] = center_1[index2].x;
+				saber1_b1[1] = center_1[index2].y;
+				saber1_b1[2] = radius_1[index2];
+
+				saber1_b2[0] = center_1[index1].x;
+				saber1_b2[1] = center_1[index1].y;
+				saber1_b2[2] = radius_1[index1];	
+			}
+			else if(distance2_1 <= distance1_2 && distance2_1 <= distance1_1 && distance2_1 <= distance2_2){
+				saber1_b1[0] = center_1[index2].x;
+				saber1_b1[1] = center_1[index2].y;
+				saber1_b1[2] = radius_1[index2];
+
+				saber1_b2[0] = center_1[index1].x;
+				saber1_b2[1] = center_1[index1].y;
+				saber1_b2[2] = radius_1[index1];	
+			}
+			else{
+				saber1_b1[0] = center_1[index1].x;
+				saber1_b1[1] = center_1[index1].y;
+				saber1_b1[2] = radius_1[index1];
+
+				saber1_b2[0] = center_1[index2].x;
+				saber1_b2[1] = center_1[index2].y;
+				saber1_b2[2] = radius_1[index2];	
+			}
+		}
+		else {
+			saber1_b1[0] = center_1[index1].x;
+			saber1_b1[1] = center_1[index1].y;
+			saber1_b1[2] = radius_1[index1];
+			
+			saber1_b2[0] = center_1[index2].x;
+			saber1_b2[1] = center_1[index2].y;
+			saber1_b2[2] = radius_1[index2];	
+		}
+	}
     //ring added
-    for (int i = blurCount - 1; i >= 1; i--)
+    for (int i = 3 - 1; i >= 1; i--)
     {
         saber1_b1_past[i][0] = saber1_b1_past[i-1][0];
         saber1_b1_past[i][1] = saber1_b1_past[i-1][1];
@@ -541,14 +679,6 @@ void idle()
         saber1_b2_past[i][0] = saber1_b2_past[i-1][0];
         saber1_b2_past[i][1] = saber1_b2_past[i-1][1];
         saber1_b2_past[i][2] = saber1_b2_past[i-1][2];
-        
-        saber2_b1_past[i][0] = saber2_b1_past[i-1][0];
-        saber2_b1_past[i][1] = saber2_b1_past[i-1][1];
-        saber2_b1_past[i][2] = saber2_b1_past[i-1][2];
-        
-        saber2_b2_past[i][0] = saber2_b2_past[i-1][0];
-        saber2_b2_past[i][1] = saber2_b2_past[i-1][1];
-        saber2_b2_past[i][2] = saber2_b2_past[i-1][2];
     }
     
     saber1_b1_past[0][0] = saber1_b1[0];
@@ -558,37 +688,37 @@ void idle()
     saber1_b2_past[0][0] = saber1_b2[0];
     saber1_b2_past[0][1] = saber1_b2[1];
     saber1_b2_past[0][2] = saber1_b2[2];
-    
-    saber2_b1_past[0][0] = saber2_b1[0];
-    saber2_b1_past[0][1] = saber2_b1[1];
-    saber2_b1_past[0][2] = saber2_b1[2];
-    
-    saber2_b2_past[0][0] = saber2_b2[0];
-    saber2_b2_past[0][1] = saber2_b2[1];
-    saber2_b2_past[0][2] = saber2_b2[2];
     //end ring added
     
-	// Draw found objects
-	for( size_t i = 0; i< contours_1.size(); i++ ) {
-        
-		if(contoursPoly_1[i].size() > minPoints){
-			if(count == 0){
-				saber1_b1[0] = center_1[i].x;
-				saber1_b1[1] = center_1[i].y;
-				saber1_b1[2] = radius_1[i];
-			}
-			else if(count == 1){
-				saber1_b2[0] = center_1[i].x;
-				saber1_b2[1] = center_1[i].y;
-				saber1_b2[2] = radius_1[i];
-			}
-			cv::Scalar color = cv::Scalar( 255, 0, 255 );
-			cv::drawContours( texFrame, contoursPoly_1, i, color, 1, 8, std::vector<cv::Vec4i>(), 0, cv::Point() );
-			cv::rectangle( texFrame, bb_1[i].tl(), bb_1[i].br(), color, 2, 8, 0 );
-			cv::circle( texFrame, center_1[i], (int)radius_1[i], color, 2, 8, 0 );
-			count++;
+	s1_b1_dX = 0;
+	s1_b1_dY = 0;
+
+	// Interpolate points
+	for (int i = 0; (i + 1) < 3; i += 2){
+
+		double dX_b1 = (saber1_b1_past[i + 1][0] - saber1_b1_past[i][0])/(1.0 * ((blurCount*blurCount)/2.0));
+		double dY_b1 = (saber1_b1_past[i + 1][1] - saber1_b1_past[i][1])/(1.0 * ((blurCount*blurCount)/2.0));
+		double dZ_b1 = (saber1_b1_past[i + 1][2] - saber1_b1_past[i][2])/(1.0 * ((blurCount*blurCount)/2.0));
+		double dX_b2 = (saber1_b2_past[i + 1][0] - saber1_b2_past[i][0])/(1.0 * ((blurCount*blurCount)/2.0));
+		double dY_b2 = (saber1_b2_past[i + 1][1] - saber1_b2_past[i][1])/(1.0 * ((blurCount*blurCount)/2.0));
+		double dZ_b2 = (saber1_b2_past[i + 1][2] - saber1_b2_past[i][2])/(1.0 * ((blurCount*blurCount)/2.0));
+		
+		s1_b1_dX += dX_b1;
+		s1_b1_dY += dY_b1;
+
+		for (int k = i*(blurCount*blurCount)/2; k < ((i*(blurCount*blurCount)/2) +(blurCount*blurCount)/2); k++){
+
+			saber1_b1_inter[i + k][0] = saber1_b1_past[i][0] + dX_b1*(k);
+			saber1_b1_inter[i + k][1] = saber1_b1_past[i][1] + dY_b1*(k);
+			saber1_b1_inter[i + k][2] = saber1_b1_past[i][2] + dZ_b1*(k);
+			
+			saber1_b2_inter[i + k][0] = saber1_b2_past[i][0] + dX_b2*(k);
+			saber1_b2_inter[i + k][1] = saber1_b2_past[i][1] + dY_b2*(k);
+			saber1_b2_inter[i + k][2] = saber1_b2_past[i][2] + dZ_b2*(k);
 		}
 	}
+
+	//printf("dx = %lf, dy = %lf\n", s1_b1_dX, s1_b1_dY);
     
     
 	/**************************************************************************
@@ -601,20 +731,25 @@ void idle()
     
 	// Filter out colors which are out of range
 	cvInRangeS(hsv_frame, hsv_min_2, hsv_max_2, thresholded_2);
-    
+
 	// Detector works better with some smoothing of the image
 	for (int i = 0; i < smooth_count; i++){
-		cvSmooth( thresholded_2, thresholded_2, CV_GAUSSIAN, 9, 9 );
-		cvSmooth( thresholded_2, thresholded_2, CV_MEDIAN, 9, 9 );
+		cvSmooth( thresholded_2, thresholded_2, CV_MEDIAN, 3, 3 );
+		//cvSmooth( thresholded_2, thresholded_2, CV_GAUSSIAN, 9, 9 );
 	}
     
-    
 	if(cvGetWindowHandle("Saber - 2")) cvShowImage( "Threshold - 2", thresholded_2 );
+
+    cvErode(thresholded_2,thresholded_2,NULL,1);
+    cvDilate( thresholded_2, thresholded_2, NULL, 9 );
+	cvSmooth( thresholded_2, thresholded_2, CV_MEDIAN, 9, 9 );
+
+	
 	cv::Mat thresholdImg_2 = thresholded_2;
     
     
 	// Find contours
-	cv::findContours( thresholdImg_2, contours_2, CV_RETR_LIST, CV_CHAIN_APPROX_NONE );
+	cv::findContours( thresholdImg_2, contours_2, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_TC89_L1 );
     
 	// Contours refinement
 	contoursPoly_2.resize( contours_2.size() );
@@ -638,26 +773,136 @@ void idle()
 	// Draw contours + bounding boxes + enclosing circles.
 	texFrame = frame;
 	count = 0;
-    
+	index1 = -1;
+	index2 = -1;
+
 	// Draw found objects
 	for( size_t i = 0; i< contours_2.size(); i++ ) {
         
 		if(contoursPoly_2[i].size() > minPoints){
 			if(count == 0){
-				saber2_b1[0] = center_2[i].x;
-				saber2_b1[1] = center_2[i].y;
-				saber2_b1[2] = radius_2[i];
+				//saber1_b1[0] = center_1[i].x;
+				//saber1_b1[1] = center_1[i].y;
+				//saber1_b1[2] = radius_1[i];
+				index1 = i;
+				count++;
 			}
 			else if(count == 1){
-				saber2_b2[0] = center_2[i].x;
-				saber2_b2[1] = center_2[i].y;
-				saber2_b2[2] = radius_2[i];
+				//saber1_b2[0] = center_1[i].x;
+				//saber1_b2[1] = center_1[i].y;
+				//saber1_b2[2] = radius_1[i];
+				index2 = i;
+				count++;
 			}
+			/*
 			cv::Scalar color = cv::Scalar( 255, 0, 255 );
 			cv::drawContours( texFrame, contoursPoly_2, i, color, 1, 8, std::vector<cv::Vec4i>(), 0, cv::Point() );
 			cv::rectangle( texFrame, bb_2[i].tl(), bb_2[i].br(), color, 2, 8, 0 );
 			cv::circle( texFrame, center_2[i], (int)radius_2[i], color, 2, 8, 0 );
-			count++;
+			*/
+		}
+	}
+
+	if(index1 >= 0 && index2 >= 0){
+		if(saber2_b1 != NULL && saber2_b2 != NULL){
+			double distance1_1 = distance(saber2_b1, center_2[index1].x, center_2[index1].y);
+			double distance2_1 = distance(saber2_b2, center_2[index1].x, center_2[index1].y);
+			double distance1_2 = distance(saber2_b1, center_2[index2].x, center_2[index2].y);
+			double distance2_2 = distance(saber2_b2, center_2[index2].x, center_2[index2].y);
+			//printf("%lf, %lf, %lf, %lf\n", distance1_1, distance2_1, distance1_2, distance2_2);
+			if(distance1_1 <= distance2_1 && distance1_1 <= distance1_2 && distance1_1 <= distance2_2){
+				saber2_b1[0] = center_2[index1].x;
+				saber2_b1[1] = center_2[index1].y;
+				saber2_b1[2] = radius_2[index1];
+
+				saber2_b2[0] = center_2[index2].x;
+				saber2_b2[1] = center_2[index2].y;
+				saber2_b2[2] = radius_2[index2];
+			}
+			else if(distance1_2 <= distance2_1 && distance1_2 <= distance1_1 && distance1_2 <= distance2_2){
+				saber2_b1[0] = center_2[index2].x;
+				saber2_b1[1] = center_2[index2].y;
+				saber2_b1[2] = radius_2[index2];
+
+				saber2_b2[0] = center_2[index1].x;
+				saber2_b2[1] = center_2[index1].y;
+				saber2_b2[2] = radius_2[index1];	
+			}
+			else if(distance2_1 <= distance1_2 && distance2_1 <= distance1_1 && distance2_1 <= distance2_2){
+				saber2_b1[0] = center_2[index2].x;
+				saber2_b1[1] = center_2[index2].y;
+				saber2_b1[2] = radius_2[index2];
+
+				saber2_b2[0] = center_2[index1].x;
+				saber2_b2[1] = center_2[index1].y;
+				saber2_b2[2] = radius_2[index1];	
+			}
+			else{
+				saber2_b1[0] = center_2[index1].x;
+				saber2_b1[1] = center_2[index1].y;
+				saber2_b1[2] = radius_2[index1];
+
+				saber2_b2[0] = center_2[index2].x;
+				saber2_b2[1] = center_2[index2].y;
+				saber2_b2[2] = radius_2[index2];	
+			}
+		}
+		else {
+			saber2_b1[0] = center_2[index1].x;
+			saber2_b1[1] = center_2[index1].y;
+			saber2_b1[2] = radius_2[index1];
+			
+			saber2_b2[0] = center_2[index2].x;
+			saber2_b2[1] = center_2[index2].y;
+			saber2_b2[2] = radius_2[index2];	
+		}
+	}
+    //ring added
+    for (int i = 3 - 1; i >= 1; i--)
+    {
+        saber2_b1_past[i][0] = saber2_b1_past[i-1][0];
+        saber2_b1_past[i][1] = saber2_b1_past[i-1][1];
+        saber2_b1_past[i][2] = saber2_b1_past[i-1][2];
+        
+        saber2_b2_past[i][0] = saber2_b2_past[i-1][0];
+        saber2_b2_past[i][1] = saber2_b2_past[i-1][1];
+        saber2_b2_past[i][2] = saber2_b2_past[i-1][2];
+    }
+    
+    saber2_b1_past[0][0] = saber2_b1[0];
+    saber2_b1_past[0][1] = saber2_b1[1];
+    saber2_b1_past[0][2] = saber2_b1[2];
+    
+    saber2_b2_past[0][0] = saber2_b2[0];
+    saber2_b2_past[0][1] = saber2_b2[1];
+    saber2_b2_past[0][2] = saber2_b2[2];
+    //end ring added
+    
+	s2_b1_dX = 0;
+	s2_b1_dY = 0;
+
+	// Interpolate points
+	for (int i = 0; (i + 1) < 3; i += 2){
+
+		double dX_b1 = (saber2_b1_past[i + 1][0] - saber2_b1_past[i][0])/(1.0 * ((blurCount*blurCount)/2.0));
+		double dY_b1 = (saber2_b1_past[i + 1][1] - saber2_b1_past[i][1])/(1.0 * ((blurCount*blurCount)/2.0));
+		double dZ_b1 = (saber2_b1_past[i + 1][2] - saber2_b1_past[i][2])/(1.0 * ((blurCount*blurCount)/2.0));
+		double dX_b2 = (saber2_b2_past[i + 1][0] - saber2_b2_past[i][0])/(1.0 * ((blurCount*blurCount)/2.0));
+		double dY_b2 = (saber2_b2_past[i + 1][1] - saber2_b2_past[i][1])/(1.0 * ((blurCount*blurCount)/2.0));
+		double dZ_b2 = (saber2_b2_past[i + 1][2] - saber2_b2_past[i][2])/(1.0 * ((blurCount*blurCount)/2.0));
+		
+		s2_b1_dX += dX_b1;
+		s2_b1_dY += dY_b1;
+
+		for (int k = i*(blurCount*blurCount)/2; k < ((i*(blurCount*blurCount)/2) +(blurCount*blurCount)/2); k++){
+
+			saber2_b1_inter[i + k][0] = saber2_b1_past[i][0] + dX_b1*(k);
+			saber2_b1_inter[i + k][1] = saber2_b1_past[i][1] + dY_b1*(k);
+			saber2_b1_inter[i + k][2] = saber2_b1_past[i][2] + dZ_b1*(k);
+			
+			saber2_b2_inter[i + k][0] = saber2_b2_past[i][0] + dX_b2*(k);
+			saber2_b2_inter[i + k][1] = saber2_b2_past[i][1] + dY_b2*(k);
+			saber2_b2_inter[i + k][2] = saber2_b2_past[i][2] + dZ_b2*(k);
 		}
 	}
     

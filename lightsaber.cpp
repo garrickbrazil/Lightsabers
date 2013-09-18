@@ -17,6 +17,10 @@
 
 using namespace cv;
 
+char quote[6][80];
+int numberOfQuotes=0,i;
+double openTime = 8000;
+
 // Saber 1 Settings
 int saber1_c1 = 41;
 int saber1_c2 = 30;
@@ -90,6 +94,8 @@ float saber2_b1_past[3][3] = {0}, saber2_b2_past[3][3] = {0};
 // Interpolated sabers
 float saber1_b1_inter[blurCount*blurCount][3] = {0}, saber1_b2_inter[blurCount*blurCount][3] = {0};
 float saber2_b1_inter[blurCount*blurCount][3] = {0}, saber2_b2_inter[blurCount*blurCount][3] = {0};
+
+int openerTime, lastOpenerTime;
 
 // Images used for processing
 CvCapture *capture;
@@ -533,6 +539,36 @@ void keyboard( unsigned char key, int x, int y )
 	glutPostRedisplay();
 }
 
+void RenderToDisplay()
+{
+    int l,lenghOfQuote, i;
+
+	int UpwardsScrollVelocity = -500*(openerTime/openTime);
+
+    glTranslatef(15, -75 + 0*(openerTime/openTime), UpwardsScrollVelocity);
+    glRotatef(-80, 1.0, 0.0, 0.0);
+    glScalef(0.1, 0.1, 0.1);
+
+
+    for(  l=0;l<numberOfQuotes;l++)
+    {
+        lenghOfQuote = (int)strlen(quote[l]);
+        glPushMatrix();
+        glTranslatef(-(30*30), -(l*200), 0.0);
+
+        for (i = 0; i < lenghOfQuote; i++)
+        {
+			glPushMatrix();
+			glTranslatef((2.8*30*30.0*(i*1.0/lenghOfQuote)), 0, 0.0);
+            glColor3f((UpwardsScrollVelocity/10)+300+(l*10),(UpwardsScrollVelocity/10)+300+(l*10),0.0);
+            glutStrokeCharacter(GLUT_STROKE_ROMAN, quote[l][i]);
+			glPopMatrix();
+        }
+        glPopMatrix();
+    }
+
+}
+
 
 /*********************************************************
  * Method: display
@@ -540,7 +576,29 @@ void keyboard( unsigned char key, int x, int y )
  *********************************************************/
 void display()
 {
-    // Clear buffers
+
+	if(openerTime < openTime){
+		  glDisable(GL_DEPTH_TEST);
+			glViewport( 0, 0, (GLsizei) windowWidth, (GLsizei) windowHeight );
+		  glMatrixMode(GL_PROJECTION);
+		  glLoadIdentity();
+		  gluPerspective(60, 1.0, 1.0, 3200);
+		  glMatrixMode(GL_MODELVIEW);
+	
+		 glClear(GL_COLOR_BUFFER_BIT);
+		  glLoadIdentity();
+		  gluLookAt(0.0, 30.0, 100.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0);
+		glClearColor(0.0, 0.0, 0.0, 1.0);
+    glLineWidth(3);
+
+		  RenderToDisplay();
+		  glEnable(GL_DEPTH_TEST);
+	}
+
+
+	else{
+    
+	// Clear buffers
 	glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
     
 	// Viewport setup
@@ -603,6 +661,8 @@ void display()
 
     glDisable(GL_BLEND);
     
+	}
+
 	// Double buffering
 	glutSwapBuffers();
 }
@@ -615,6 +675,12 @@ void display()
 void idle()
 {	
 
+	if(openerTime < openTime){
+		
+		openerTime = glutGet( GLUT_ELAPSED_TIME ) - lastOpenerTime;
+		printf("%d\n", openerTime);
+	}
+	else{
 	// Saber 1 Animation On
 	if(saber1 && portionDrawn_1 < 1){
 		
@@ -1010,7 +1076,7 @@ void idle()
 			saber2_b2_inter[i + k][2] = saber2_b2_past[i][2] + dZ_b2*(k);
 		}
 	}
-    
+	}
     
     glutPostRedisplay();
 }
@@ -1021,7 +1087,24 @@ void idle()
  * Purpose: main program
  *********************************************************/
 int main(int argc, char** argv){
-    
+
+	/*
+	
+	It is a period of summer 2013. Garrick Brazil, Devin Holland,
+	Ed Cana, Jeffrey Ring have completed their first OpenGL and
+	OpenCV application.
+	
+	This is it...
+	*/
+	strcpy(quote[0],"It is a period of summer 2013");
+    strcpy(quote[1],"Garrick Brazil, Devin Holland,");
+    strcpy(quote[2],"Ed Cana, Jefferey Ring have");
+    strcpy(quote[3],"completed their first OpenGL and");
+    strcpy(quote[4],"OpenCV application.");
+    numberOfQuotes=5;
+	glClearColor(0.0, 0.0, 0.0, 1.0);
+    glLineWidth(3);
+
 	// Open capture device, exit on error
 	capture = cvCaptureFromCAM( 1 );
 	if( !capture ){ fprintf( stderr, "ERROR: capture is NULL \n" ); return -1; }
@@ -1050,6 +1133,9 @@ int main(int argc, char** argv){
     glutKeyboardFunc(keyboard);
     glutIdleFunc(idle);
     
+	lastOpenerTime = glutGet( GLUT_ELAPSED_TIME );
+	openerTime = 0;
+
 	// Start loop
     glutMainLoop();
     

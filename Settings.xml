@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<opencv_storage>
+<saber1_h_Min>45</saber1_h_Min>
+<saber1_s_Min>84</saber1_s_Min>
+<saber1_v_Min>75</saber1_v_Min>
+<saber1_h_Max>65</saber1_h_Max>
+<saber1_s_Max>167</saber1_s_Max>
+<saber1_v_Max>255</saber1_v_Max>
+<saber1_color>1</saber1_color>
+<saber2_h_Min>45</saber2_h_Min>
+<saber2_s_Min>84</saber2_s_Min>
+<saber2_v_Min>75</saber2_v_Min>
+<saber2_h_Max>65</saber2_h_Max>
+<saber2_s_Max>167</saber2_s_Max>
+<saber2_v_Max>255</saber2_v_Max>
+<saber2_color>0</saber2_color>
+<camera>0</camera>
+</opencv_storage>

@@ -15,8 +15,23 @@
 #include <stdlib.h>
 #include <math.h>
 #include <time.h>
+#include "vector_3d.h"
+#include "image_tga.h"
+
 
 using namespace cv;
+
+// Images and textures.
+ImageTGA img1;
+GLuint tex1;
+
+cv::Size size = cv::Size(400,300);
+
+char quote[8][80];
+int numberOfQuotes=0,i;
+double openTime = 24000;
+int openerTime, lastOpenerTime;
+bool opener = false;
 
 // Saber 1 Settings
 int saber1_h_Min = 45;
@@ -450,10 +465,10 @@ void drawSaber(float* po1, float* po2, float r, float g, float b, double trans, 
 			rad = (.28 +  (1.1*i*i*i*i*i)/(1.0*cylinderLayers*cylinderLayers*cylinderLayers*cylinderLayers*cylinderLayers))*p1[2]/width;
 
 			// Solid white middle
-			if (i == 0) glColor4f(1*trans,1*trans,1*trans,1);
+			if (i == 0) glColor4f(1*trans,1*trans,1*trans,1*trans);
 
 			// Saber color multiplied by transparency (white = transparent)
-			else glColor4f(r*(1-(1.0*i)/cylinderLayers)*trans, g*(1-(1.0*i)/cylinderLayers)*trans, b*(1-(1.0*i)/cylinderLayers)*trans, 1);
+			else glColor4f(r*(1-(1.0*i)/cylinderLayers)*trans, g*(1-(1.0*i)/cylinderLayers)*trans, b*(1-(1.0*i)/cylinderLayers)*trans, 1*trans);
         
 			// Render the cylinder
 			renderCylinder(aX,aY,aZ,bX,bY,bZ,rad,10);
@@ -468,7 +483,6 @@ void drawSaber(float* po1, float* po2, float r, float g, float b, double trans, 
  *********************************************************/
 void init()
 {
-    
 	// Setup
 	glClearColor( 0.4f, 0.4f, 0.4f, 0.0f );
 	glShadeModel( GL_SMOOTH );
@@ -476,6 +490,20 @@ void init()
     
 	// Texturing
 	glPixelStorei( GL_UNPACK_ALIGNMENT, 1 );
+	
+	glGenTextures( 1, &tex1 );
+	glBindTexture(GL_TEXTURE_2D, tex1);
+	// See: http://www.opengl.org/sdk/docs/man/xhtml/glTexParameter.xml
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,GL_NEAREST );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
+	// See: http://www.opengl.org/sdk/docs/man2/xhtml/glTexEnv.xml
+	glTexEnvf( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_DECAL );
+	// See: http://www.opengl.org/sdk/docs/man/xhtml/glTexImage2D.xml
+	glTexImage2D( GL_TEXTURE_2D, 0, img1.format(), img1.width(), img1.height(), 0, img1.format(), GL_UNSIGNED_BYTE, img1.data() );
+
+	
 	glGenTextures( 1, &videoTexture );
 	glBindTexture( GL_TEXTURE_2D, videoTexture );
 	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT );
@@ -511,14 +539,20 @@ void keyboard( unsigned char key, int x, int y )
 {
 	switch( key )
     {
+		case ' ':{
+			openerTime = 50000;
+			capture.grab();
+			if( !capture.retrieve(frame) ){ fprintf( stderr, "ERROR: frame is null...\n" );  exit(-1); }
+		
+			break;
+		}
 		case '1':{
 
 			// Store current time
 			lastTime_1 = glutGet( GLUT_ELAPSED_TIME );
 			
-			saber1 = !saber1;
-			if (saber1){PlaySound(TEXT("TurnOn.WAV"), NULL, SND_ASYNC); portionDrawn_1 = 0;}
-			else{PlaySound(TEXT("TurnOff.WAV"), NULL, SND_ASYNC); portionDrawn_1 = 1;}
+			if (!saber1 && (lastTime_1 - saber1_time) < 300){ saber1 = !saber1; PlaySound(TEXT("TurnOn.WAV"), NULL, SND_ASYNC); portionDrawn_1 = 0;}
+			else if((lastTime_1 - saber1_time) < 300){ saber1 = !saber1; PlaySound(TEXT("TurnOff.WAV"), NULL, SND_ASYNC); portionDrawn_1 = 1;}
 			break;
 		}
 
@@ -527,9 +561,8 @@ void keyboard( unsigned char key, int x, int y )
 			// Store current time
 			lastTime_2 = glutGet( GLUT_ELAPSED_TIME );
 			
-			saber2 = !saber2;
-			if (saber2){PlaySound(TEXT("TurnOn.WAV"), NULL, SND_ASYNC); portionDrawn_2 = 0;}
-			else{PlaySound(TEXT("TurnOff.WAV"), NULL, SND_ASYNC); portionDrawn_2 = 1;}
+			if (!saber2 && (lastTime_2 - saber2_time) < 300){ saber2 = !saber2; PlaySound(TEXT("TurnOn.WAV"), NULL, SND_ASYNC); portionDrawn_2 = 0;}
+			else if((lastTime_2 - saber2_time) < 300){ saber2 = !saber2; PlaySound(TEXT("TurnOff.WAV"), NULL, SND_ASYNC); portionDrawn_2 = 1;}
 			break;
 		}
 
@@ -605,6 +638,45 @@ void keyboard( unsigned char key, int x, int y )
 	glutPostRedisplay();
 }
 
+/*********************************************************
+ * Method: IntroText
+ * Purpose: displays opening text sequence
+ *********************************************************/
+void IntroText()
+{
+    int l,lenghOfQuote, i;
+
+	int UpwardsScrollVelocity = -400*(pow((openerTime - 10000),.9)/(pow((openTime - 10000),.9)));
+
+    glTranslatef(-20, -75, UpwardsScrollVelocity);
+    glRotatef(-80, 1.0, 0.0, 0.0);
+    glScalef(0.08, 0.12, 0.12);
+
+
+    for(  l=0;l<numberOfQuotes;l++)
+    {
+        lenghOfQuote = (int)strlen(quote[l]);
+        glPushMatrix();
+        glTranslatef(-(30*30), -(l*200), 0.0);
+		int factor = 0;
+
+        for (i = 0; i < lenghOfQuote; i++)
+        {
+			glPushMatrix();
+
+			if(l != 5 && l != 7)glTranslatef((2.8*30*27.0*((i+factor)*1.0/lenghOfQuote)), 0, 0.0);
+			else if(l == 5) glTranslatef((2.8*35*(i+factor)), 0, 0.0);
+			else if(l == 7) glTranslatef((2.8*35*(i+factor)), 0, 0.0);
+
+			if(quote[l][i] == 'm') factor++;
+
+			glColor3f((UpwardsScrollVelocity/10)+300+(l*10),(UpwardsScrollVelocity/10)+300+(l*10),0.0);
+            glutStrokeCharacter(GLUT_STROKE_ROMAN, quote[l][i]);
+			glPopMatrix();
+        }
+        glPopMatrix();
+    }
+}
 
 /*********************************************************
  * Method: display
@@ -612,9 +684,94 @@ void keyboard( unsigned char key, int x, int y )
  *********************************************************/
 void display()
 {
+	if(openerTime < openTime){
+		  glDisable(GL_DEPTH_TEST);
+		  glLineWidth(3);
+		  glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
+		  glViewport( 0, 0, (GLsizei) windowWidth, (GLsizei) windowHeight );
+		  glMatrixMode(GL_PROJECTION);
+		  glLoadIdentity();
+		  gluPerspective(60, 1.0, 1.0, 3200);
+		  glMatrixMode(GL_MODELVIEW);
 
+		 glLoadIdentity();
+		 gluLookAt(0.0, 30, 100.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0);
+		 glClearColor(0.0, 0.0, 0.0, 1.0);
+		 float logoSize = 35;
+
+		 // From 0 -> 4000
+		 if(openerTime <= 4000){
+
+			 char opener[2][80];
+			 strcpy(opener[0], "A couple days ago in room");
+			 strcpy(opener[1], "number AB-3509...");
+
+			 int l,lenghOfQuote, i;
+
+			int UpwardsScrollVelocity = -150;
+
+			glTranslatef(-10, 10 + 0*(openerTime)/2000.0, UpwardsScrollVelocity);
+			glScalef(0.085, 0.085, 0.085);
+
+
+			for(  l=0; l < 2; l++)
+			{
+				lenghOfQuote = (int)strlen(opener[l]);
+				glPushMatrix();
+				glTranslatef(-(30*35), -(l*200), 0.0);
+				int factor = 0;
+				for (i = 0; i < lenghOfQuote; i++)
+				{
+					glPushMatrix();
+					if(l != 1) glTranslatef((2.8*30*30.0*((i + factor)*1.0/lenghOfQuote)), 0, 0.0);
+					else glTranslatef((2.8*42*(i + factor)), 0, 0.0);
+					
+					if (opener[l][i] == 'm') factor++;
+					glColor3f((UpwardsScrollVelocity/10)+300+(l*10),(UpwardsScrollVelocity/10)+300+(l*10),0.0);
+					glutStrokeCharacter(GLUT_STROKE_ROMAN, opener[l][i]);
+					glPopMatrix();
+				}
+				glPopMatrix();
+			}
+		 }
+
+		 // From 4000 -> 10000
+		 else if(openerTime <=10000){
+			 
+			 if(!opener){
+				 opener = true;
+				 PlaySound(TEXT("Intro.WAV"), NULL, SND_ASYNC);
+			 }
+
+			 //Texture
+			 glEnable( GL_TEXTURE_2D );
+			 glBindTexture( GL_TEXTURE_2D, tex1 );
+			 glColor3f( 1.0f, 0.0f, 0.0f );
+
+			 glTexImage2D( GL_TEXTURE_2D, 0, img1.format(), img1.width(), img1.height(), 0, img1.format(), GL_UNSIGNED_BYTE, img1.data() );
+		 
+			 glPushMatrix();
+			 glTranslatef(0,-150*(openerTime-4000)/(6000.0),-750*(openerTime - 4000)/6000.0);
+			 glBegin( GL_QUADS );
+				glTexCoord2f( 0.0f, 0.0f ); glVertex3f( -logoSize, -logoSize, 0.0f );
+				glTexCoord2f( 1.0f, 0.0f ); glVertex3f( logoSize, -logoSize, 0.0f );
+				glTexCoord2f( 1.0f, 1.0f ); glVertex3f( logoSize, logoSize, 0.0f );
+				glTexCoord2f( 0.0f, 1.0f ); glVertex3f( -logoSize, logoSize, 0.0f );		 
+			glEnd();
+			glPopMatrix();
+			glEnable(GL_DEPTH_TEST);
+			glDisable(GL_TEXTURE_2D);
+		}
+		else{
+			IntroText();
+		}
+	}
+
+
+	else{
+    
 	calculateFPS();
-	
+
     // Clear buffers
 	glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
 
@@ -673,8 +830,8 @@ void display()
     for (int i = 0; i < blurCount*blurCount; i++)
     {
 		// Only draw if change dx or dy is significant
-        if(saber1_Blur) drawSaber(saber1_b1_inter[i], saber1_b2_inter[i], saber1_r, saber1_g, saber1_b, 1-(i*1.0/(blurCount*blurCount)), portionDrawn_1);
-        if(saber2_Blur) drawSaber(saber2_b1_inter[i], saber2_b2_inter[i], saber2_r, saber2_g, saber2_b, 1-(i*1.0/(blurCount*blurCount)), portionDrawn_2);
+        if(saber1_Blur) drawSaber(saber1_b1_inter[i], saber1_b2_inter[i], saber1_r, saber1_g, saber1_b, (1-(i*1.0/(blurCount*blurCount)))*.04, portionDrawn_1);
+        if(saber2_Blur) drawSaber(saber2_b1_inter[i], saber2_b2_inter[i], saber2_r, saber2_g, saber2_b, (1-(i*1.0/(blurCount*blurCount)))*.04, portionDrawn_2);
     }
 
 	// Show framerate
@@ -685,7 +842,7 @@ void display()
 	glPopMatrix();
 	
     glDisable(GL_BLEND);
-
+	}
 	// Double buffering
 	glutSwapBuffers();
 }
@@ -697,11 +854,28 @@ void display()
  *********************************************************/
 void idle()
 {	
+
+	if(openerTime < openTime){
+
+		openerTime = glutGet( GLUT_ELAPSED_TIME ) - lastOpenerTime;
+		//printf("%d\n", openerTime);
+	}
+
+	else if(opener){
+	
+		capture.grab();
+		if( !capture.retrieve(frame) ){ fprintf( stderr, "ERROR: frame is null...\n" );  exit(-1); }
+		PlaySound(NULL, NULL, SND_ASYNC);
+		opener = false;
+	}
+	
+	else{
+	
 	capture.grab();
 	if( !capture.retrieve(frame) ){ fprintf( stderr, "ERROR: frame is null...\n" );  exit(-1); }
-
+		
 	//pyrDown(frame, smallFrame);
-	resize(frame,smallFrame, cv::Size(400,300));
+	resize(frame,smallFrame, size);
 
 	// Saber 1 Animation On
 	if(saber1 && portionDrawn_1 < 1){
@@ -1095,6 +1269,7 @@ void idle()
 			saber2_b2_inter[i + k][2] = saber2_b2_past[i][2] + dZ_b2*(k);
 		}
 	}
+	}
     glutPostRedisplay();
 }
 
@@ -1106,6 +1281,20 @@ void idle()
 int main(int argc, char** argv){
     
 	
+	img1.load( "Logo.tga" );
+	strcpy(quote[0],"It is a period of summer");
+    strcpy(quote[1],"2013. Garrick Brazil, Devin");
+    strcpy(quote[2],"Holland, Ed Cana, and");
+    strcpy(quote[3],"Jeffrey Ring have completed");
+    strcpy(quote[4],"their first OpenGL and");
+	strcpy(quote[5],"OpenCV application.");
+	strcpy(quote[6],"");
+	strcpy(quote[7],"This is it.");
+    numberOfQuotes=8;
+	glClearColor(0.0, 0.0, 0.0, 1.0);
+    glLineWidth(4);
+
+
     string filename = "Settings.xml";
     FileStorage fs(filename, FileStorage::READ);
     fs.open(filename, FileStorage::READ);
@@ -1136,8 +1325,8 @@ int main(int argc, char** argv){
 
 	// Open capture device, exit on error
 	capture.open(camera);
-	capture.set(CV_CAP_PROP_FRAME_WIDTH, 640);
-    capture.set(CV_CAP_PROP_FRAME_HEIGHT, 480); 
+	//capture.set(CV_CAP_PROP_FRAME_WIDTH, 640);
+    //capture.set(CV_CAP_PROP_FRAME_HEIGHT, 480); 
 
 	if( !capture.isOpened() ){ fprintf( stderr, "ERROR: capture is NULL \n" ); return -1; }
     
@@ -1145,7 +1334,6 @@ int main(int argc, char** argv){
 	capture.grab();
 	if( !capture.retrieve(frame) ){ fprintf( stderr, "ERROR: frame is null...\n" ); exit(-1); }
     
-	cv::Size size = cv::Size(400,300);
 
 	smallFrame = Mat(size, frame.depth(), frame.channels());
 
